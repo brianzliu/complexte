@@ -5,13 +5,17 @@ import Editor from '../components/Editor'
 
 export default function DocumentPage() {
   const { id } = useParams({ strict: false }) as { id: string }
-  const { openPage, pages, activeId, toggleSidebar, isSidebarCollapsed } = useDocumentStore()
+  const { openPage, pages, activeId, toggleSidebar, isSidebarCollapsed, workspaces } = useDocumentStore()
 
   useEffect(() => {
     openPage(id)
-  }, [id])
+  }, [id, openPage])
 
   const page = pages.find(item => item.id === id)
+  const workspace = page ? workspaces.find(item => item.id === page.workspaceId) : null
+  const pathSegments = page
+    ? [workspace?.name, ...page.indexedPath, page.name].filter(Boolean)
+    : ['Untitled']
 
   return (
     <div className="document-page">
@@ -26,7 +30,21 @@ export default function DocumentPage() {
             <line x1="9" y1="3" x2="9" y2="21" />
           </svg>
         </button>
-        <h1 className="document-title">{page?.name ?? 'Untitled'}</h1>
+        <nav className="document-breadcrumb" aria-label="Document path">
+          {pathSegments.map((segment, index) => {
+            const isCurrent = index === pathSegments.length - 1
+            return (
+              <span key={`${segment}-${index}`} className="breadcrumb-segment-wrap">
+                {index > 0 && <span className="breadcrumb-separator">/</span>}
+                {isCurrent ? (
+                  <h1 className="breadcrumb-segment current">{segment}</h1>
+                ) : (
+                  <span className="breadcrumb-segment">{segment}</span>
+                )}
+              </span>
+            )
+          })}
+        </nav>
       </div>
       {activeId === id && <Editor key={id} />}
     </div>

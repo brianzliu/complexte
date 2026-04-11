@@ -1,36 +1,108 @@
-import { useCallback, useRef, useState } from 'react'
-import { Plate, PlateContent, usePlateEditor, useEditorRef, useEditorSelector } from 'platejs/react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { CSSProperties, MouseEvent, ReactNode } from 'react'
+import { Plate, PlateContent, createPlatePlugin, useEditorRef, usePlateEditor } from 'platejs/react'
 import { BasicMarksPlugin } from '@platejs/basic-nodes/react'
-import { BasicBlocksPlugin } from '@platejs/basic-nodes/react'
+import { BasicBlocksPlugin, HighlightPlugin } from '@platejs/basic-nodes/react'
+import { CodeBlockPlugin } from '@platejs/code-block/react'
 import { ListPlugin } from '@platejs/list/react'
 import { toggleList } from '@platejs/list'
 import { MarkdownPlugin } from '@platejs/markdown'
 import remarkGfm from 'remark-gfm'
 import { useDocumentStore } from '../store/useDocumentStore'
 
+type MenuPosition = {
+  x: number
+  y: number
+}
+
+const textColors = [
+  { label: 'Default', value: '' },
+  { label: 'Red', value: '#dc2626' },
+  { label: 'Green', value: '#0f9f6e' },
+  { label: 'Blue', value: '#2563eb' },
+]
+
+const highlightColors = [
+  { label: 'Yellow', value: '#fef08a' },
+  { label: 'Green', value: '#bbf7d0' },
+  { label: 'Pink', value: '#fbcfe8' },
+]
+
+const TextColorPlugin = createPlatePlugin({
+  key: 'textColor',
+  node: {
+    isLeaf: true,
+    leafProps: ({ leaf }) => ({
+      style: { color: (leaf as { textColor?: string }).textColor },
+    }),
+  },
+})
+
+const HighlightColorPlugin = createPlatePlugin({
+  key: 'highlightColor',
+  node: {
+    isLeaf: true,
+    leafProps: ({ leaf }) => ({
+      style: {
+        backgroundColor: (leaf as { highlightColor?: string }).highlightColor,
+        borderRadius: 3,
+        padding: '0 2px',
+      },
+    }),
+  },
+})
+
 const plugins = [
   BasicMarksPlugin,
   BasicBlocksPlugin,
+  HighlightPlugin,
+  TextColorPlugin,
+  HighlightColorPlugin,
+  CodeBlockPlugin,
   ListPlugin,
   MarkdownPlugin.configure({
     options: { remarkPlugins: [remarkGfm] },
   }),
 ]
 
-function ToolbarButton({
+function getSelectionPosition(): MenuPosition | null {
+  const selection = window.getSelection()
+  if (!selection || selection.rangeCount === 0) return null
+
+  const range = selection.getRangeAt(0)
+  const rect = range.getBoundingClientRect()
+  const fallbackRect = range.getClientRects()[0]
+  const targetRect = rect.width || rect.height ? rect : fallbackRect
+
+  if (!targetRect) return null
+
+  return {
+    x: targetRect.left + targetRect.width / 2,
+    y: targetRect.top,
+  }
+}
+
+function isSelectionInsideEditor(): boolean {
+  const selection = window.getSelection()
+  if (!selection || selection.rangeCount === 0) return false
+
+  const node = selection.anchorNode
+  const element = node instanceof Element ? node : node?.parentElement
+  return !!element?.closest('.plate-editor')
+}
+
+function BubbleButton({
   title,
-  active,
   onMouseDown,
   children,
 }: {
   title: string
-  active?: boolean
-  onMouseDown: (e: React.MouseEvent) => void
-  children: React.ReactNode
+  onMouseDown: (e: MouseEvent<HTMLButtonElement>) => void
+  children: ReactNode
 }) {
   return (
     <button
-      className={`fmt-btn${active ? ' active' : ''}`}
+      className="bubble-menu-btn"
       title={title}
       onMouseDown={onMouseDown}
     >
@@ -39,154 +111,183 @@ function ToolbarButton({
   )
 }
 
-function EditorToolbar({ saveState }: { saveState: 'idle' | 'saving' | 'saved' }) {
+function EditorFloatingControls() {
   const editor = useEditorRef()
+  const [selectionMenu, setSelectionMenu] = useState<MenuPosition | null>(null)
+  const [slashMenu, setSlashMenu] = useState<MenuPosition | null>(null)
 
-  const isBold = useEditorSelector(e => !!(e.marks as Record<string, boolean>)?.bold, [])
-  const isItalic = useEditorSelector(e => !!(e.marks as Record<string, boolean>)?.italic, [])
-  const isUnderline = useEditorSelector(e => !!(e.marks as Record<string, boolean>)?.underline, [])
-  const isCode = useEditorSelector(e => !!(e.marks as Record<string, boolean>)?.code, [])
-
-  const preventDefault = (fn: () => void) => (e: React.MouseEvent) => {
+  const preventDefault = (fn: () => void) => (e: MouseEvent<HTMLButtonElement>) => {
     e.preventDefault()
     fn()
   }
 
+  const updateSelectionMenu = useCallback(() => {
+    const selection = window.getSelection()
+    if (
+      !selection ||
+      selection.isCollapsed ||
+      !selection.toString().trim() ||
+      !isSelectionInsideEditor()
+    ) {
+      setSelectionMenu(null)
+      return
+    }
+
+    setSelectionMenu(getSelectionPosition())
+    setSlashMenu(null)
+  }, [])
+
+  useEffect(() => {
+    document.addEventListener('selectionchange', updateSelectionMenu)
+    window.addEventListener('resize', updateSelectionMenu)
+    window.addEventListener('scroll', updateSelectionMenu, true)
+    return () => {
+      document.removeEventListener('selectionchange', updateSelectionMenu)
+      window.removeEventListener('resize', updateSelectionMenu)
+      window.removeEventListener('scroll', updateSelectionMenu, true)
+    }
+  }, [updateSelectionMenu])
+
+  const openSlashMenu = () => {
+    window.setTimeout(() => {
+      const position = getSelectionPosition()
+      if (position) {
+        setSlashMenu({ x: position.x, y: position.y + 28 })
+        setSelectionMenu(null)
+      }
+    }, 0)
+  }
+
+  const closeMenus = () => {
+    setSelectionMenu(null)
+    setSlashMenu(null)
+  }
+
+  const applyTextColor = (color: string) => {
+    if (color) {
+      editor.tf.addMark('textColor', color)
+    } else {
+      editor.tf.removeMarks('textColor')
+    }
+    closeMenus()
+    editor.tf.focus()
+  }
+
+  const applyHighlight = (color: string) => {
+    editor.tf.addMark('highlightColor', color)
+    closeMenus()
+    editor.tf.focus()
+  }
+
+  const removeSlashTrigger = () => {
+    editor.tf.deleteBackward('character')
+  }
+
+  const runCommand = (command: () => void) => (e: MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault()
+    removeSlashTrigger()
+    command()
+    closeMenus()
+    editor.tf.focus()
+  }
+
   return (
-    <div className="editor-toolbar">
-      <div className="toolbar-formatting">
-        <ToolbarButton
-          title="Bold (⌘B)"
-          active={isBold}
-          onMouseDown={preventDefault(() => editor.tf.bold.toggle())}
+    <>
+      {selectionMenu && (
+        <div
+          className="bubble-menu"
+          style={{ '--bubble-x': `${selectionMenu.x}px`, '--bubble-y': `${selectionMenu.y}px` } as CSSProperties}
+          onMouseDown={e => e.preventDefault()}
         >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" />
-            <path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" />
-          </svg>
-        </ToolbarButton>
+          <BubbleButton title="Bold" onMouseDown={preventDefault(() => editor.tf.bold.toggle())}>
+            <strong>B</strong>
+          </BubbleButton>
+          <BubbleButton title="Italic" onMouseDown={preventDefault(() => editor.tf.italic.toggle())}>
+            <em>I</em>
+          </BubbleButton>
+          <BubbleButton title="Underline" onMouseDown={preventDefault(() => editor.tf.underline.toggle())}>
+            <span className="bubble-underline">U</span>
+          </BubbleButton>
+          <span className="bubble-menu-divider" />
+          <span className="bubble-menu-label">Text</span>
+          {textColors.map(color => (
+            <button
+              key={color.label}
+              className="bubble-swatch"
+              title={color.label}
+              style={{ '--swatch-color': color.value || 'var(--text-1)' } as CSSProperties}
+              onMouseDown={preventDefault(() => applyTextColor(color.value))}
+            />
+          ))}
+          <span className="bubble-menu-label">Fill</span>
+          {highlightColors.map(color => (
+            <button
+              key={color.label}
+              className="bubble-swatch highlight"
+              title={`${color.label} highlight`}
+              style={{ '--swatch-color': color.value } as CSSProperties}
+              onMouseDown={preventDefault(() => applyHighlight(color.value))}
+            />
+          ))}
+        </div>
+      )}
 
-        <ToolbarButton
-          title="Italic (⌘I)"
-          active={isItalic}
-          onMouseDown={preventDefault(() => editor.tf.italic.toggle())}
+      {slashMenu && (
+        <div
+          className="slash-menu"
+          style={{ '--slash-x': `${slashMenu.x}px`, '--slash-y': `${slashMenu.y}px` } as CSSProperties}
+          onMouseDown={e => e.preventDefault()}
         >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <line x1="19" y1="4" x2="10" y2="4" />
-            <line x1="14" y1="20" x2="5" y2="20" />
-            <line x1="15" y1="4" x2="9" y2="20" />
-          </svg>
-        </ToolbarButton>
+          <button className="slash-menu-item" onMouseDown={runCommand(() => editor.tf.h1.toggle())}>
+            <span>H1</span>
+            <strong>Heading 1</strong>
+          </button>
+          <button className="slash-menu-item" onMouseDown={runCommand(() => editor.tf.h2.toggle())}>
+            <span>H2</span>
+            <strong>Heading 2</strong>
+          </button>
+          <button className="slash-menu-item" onMouseDown={runCommand(() => toggleList(editor, { listStyleType: 'disc' }))}>
+            <span>-</span>
+            <strong>Bulleted list</strong>
+          </button>
+          <button className="slash-menu-item" onMouseDown={runCommand(() => toggleList(editor, { listStyleType: 'decimal' }))}>
+            <span>1.</span>
+            <strong>Numbered list</strong>
+          </button>
+          <button className="slash-menu-item" onMouseDown={runCommand(() => editor.tf.blockquote.toggle())}>
+            <span>"</span>
+            <strong>Quote</strong>
+          </button>
+          <button className="slash-menu-item" onMouseDown={runCommand(() => editor.tf.code_block.toggle())}>
+            <span>{'{}'}</span>
+            <strong>Code block</strong>
+          </button>
+          <button
+            className="slash-menu-item"
+            onMouseDown={runCommand(() => editor.tf.insertText('$$\n\n$$'))}
+          >
+            <span>Σ</span>
+            <strong>LaTeX block</strong>
+          </button>
+        </div>
+      )}
 
-        <ToolbarButton
-          title="Underline (⌘U)"
-          active={isUnderline}
-          onMouseDown={preventDefault(() => editor.tf.underline.toggle())}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M6 3v7a6 6 0 0 0 12 0V3" />
-            <line x1="4" y1="21" x2="20" y2="21" />
-          </svg>
-        </ToolbarButton>
-
-        <ToolbarButton
-          title="Inline code"
-          active={isCode}
-          onMouseDown={preventDefault(() => editor.tf.code.toggle())}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="16 18 22 12 16 6" />
-            <polyline points="8 6 2 12 8 18" />
-          </svg>
-        </ToolbarButton>
-
-        <div className="toolbar-sep" />
-
-        <ToolbarButton
-          title="Heading 1"
-          onMouseDown={preventDefault(() => editor.tf.h1.toggle())}
-        >
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, letterSpacing: -0.5 }}>H1</span>
-        </ToolbarButton>
-
-        <ToolbarButton
-          title="Heading 2"
-          onMouseDown={preventDefault(() => editor.tf.h2.toggle())}
-        >
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, letterSpacing: -0.5 }}>H2</span>
-        </ToolbarButton>
-
-        <ToolbarButton
-          title="Heading 3"
-          onMouseDown={preventDefault(() => editor.tf.h3.toggle())}
-        >
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, letterSpacing: -0.5 }}>H3</span>
-        </ToolbarButton>
-
-        <div className="toolbar-sep" />
-
-        <ToolbarButton
-          title="Bullet list"
-          onMouseDown={preventDefault(() => toggleList(editor, { listStyleType: 'disc' }))}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <line x1="9" y1="6" x2="20" y2="6" />
-            <line x1="9" y1="12" x2="20" y2="12" />
-            <line x1="9" y1="18" x2="20" y2="18" />
-            <circle cx="4" cy="6" r="1.5" fill="currentColor" stroke="none" />
-            <circle cx="4" cy="12" r="1.5" fill="currentColor" stroke="none" />
-            <circle cx="4" cy="18" r="1.5" fill="currentColor" stroke="none" />
-          </svg>
-        </ToolbarButton>
-
-        <ToolbarButton
-          title="Numbered list"
-          onMouseDown={preventDefault(() => toggleList(editor, { listStyleType: 'decimal' }))}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="10" y1="6" x2="21" y2="6" />
-            <line x1="10" y1="12" x2="21" y2="12" />
-            <line x1="10" y1="18" x2="21" y2="18" />
-            <path d="M4 6h1v4" />
-            <path d="M4 10h2" />
-            <path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1" />
-          </svg>
-        </ToolbarButton>
-
-        <ToolbarButton
-          title="Blockquote"
-          onMouseDown={preventDefault(() => editor.tf.blockquote.toggle())}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z" />
-            <path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z" />
-          </svg>
-        </ToolbarButton>
-      </div>
-
-      <div className="toolbar-center" />
-
-      <div className="toolbar-view-modes">
-        {saveState === 'saving' && (
-          <span className="save-label">
-            <span className="save-dot spinning" />
-            Saving
-          </span>
-        )}
-        {saveState === 'saved' && (
-          <span className="save-label">
-            <span className="save-dot saved" />
-            Saved
-          </span>
-        )}
-      </div>
-    </div>
+      <PlateContent
+        className="plate-editor"
+        spellCheck={false}
+        placeholder="Start writing…"
+        onKeyDown={e => {
+          if (e.key === '/') openSlashMenu()
+          if (e.key === 'Escape') closeMenus()
+        }}
+      />
+    </>
   )
 }
 
 export default function Editor() {
   const { content, setContent, saveDocument } = useDocumentStore()
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>()
   const savedTimerRef = useRef<ReturnType<typeof setTimeout>>()
@@ -227,23 +328,12 @@ export default function Editor() {
   return (
     <div className="editor-root">
       <Plate editor={editor} onValueChange={handleValueChange}>
-        <EditorToolbar saveState={saveState} />
         <div className="editor-body view-edit">
           <div className="editor-pane">
-            <PlateContent
-              className="plate-editor"
-              spellCheck={false}
-              placeholder="Start writing…"
-            />
+            <EditorFloatingControls />
           </div>
         </div>
       </Plate>
-
-      <div className="editor-statusbar">
-        <span className="status-pill status-badge">Rich Text</span>
-        <div className="status-spacer" />
-        <span className="status-pill mode-pill">Plate Editor</span>
-      </div>
     </div>
   )
 }

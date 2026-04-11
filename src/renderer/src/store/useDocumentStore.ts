@@ -176,11 +176,13 @@ interface DocumentStore {
   activeWorkspaceId: string
   pages: PageMeta[]
   activeId: string | null
+  openTabIds: string[]
   content: string
   isSidebarCollapsed: boolean
   theme: Theme
 
   openPage: (id: string) => void
+  closeTab: (id: string) => string | null
   setContent: (content: string) => void
   saveDocument: () => void
   createWorkspace: (name: string) => Workspace
@@ -198,6 +200,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   activeWorkspaceId: INITIAL_WORKSPACES[0].id,
   pages: INITIAL_PAGES,
   activeId: null,
+  openTabIds: [],
   content: '',
   isSidebarCollapsed: false,
   theme: loadTheme(),
@@ -208,8 +211,31 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set({
       activeId: id,
       activeWorkspaceId: page.workspaceId,
+      openTabIds: get().openTabIds.includes(id) ? get().openTabIds : [...get().openTabIds, id],
       content: contentStore[id] ?? '',
     })
+  },
+
+  closeTab: (id: string) => {
+    const { activeId, activeWorkspaceId, content, openTabIds, pages } = get()
+    const tabIndex = openTabIds.indexOf(id)
+    if (tabIndex === -1) return activeId
+
+    const nextOpenTabIds = openTabIds.filter(tabId => tabId !== id)
+    const isClosingActiveTab = activeId === id
+    const nextActiveId = isClosingActiveTab
+      ? nextOpenTabIds[Math.min(tabIndex, nextOpenTabIds.length - 1)] ?? null
+      : activeId
+    const nextPage = nextActiveId ? pages.find(page => page.id === nextActiveId) : null
+
+    set({
+      activeId: nextActiveId,
+      activeWorkspaceId: isClosingActiveTab && nextPage ? nextPage.workspaceId : activeWorkspaceId,
+      openTabIds: nextOpenTabIds,
+      content: isClosingActiveTab ? (nextActiveId ? contentStore[nextActiveId] ?? '' : '') : content,
+    })
+
+    return nextActiveId
   },
 
   setContent: (content: string) => {
@@ -275,6 +301,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     contentStore[id] = `# ${name}\n\n`
     set(state => ({
       pages: [...state.pages, page],
+      openTabIds: [...state.openTabIds, id],
     }))
     return page
   },
@@ -284,6 +311,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     delete contentStore[id]
     set(state => ({
       pages: state.pages.filter(page => page.id !== id),
+      openTabIds: state.openTabIds.filter(tabId => tabId !== id),
       activeId: activeId === id ? null : activeId,
       content: activeId === id ? '' : state.content,
     }))

@@ -10,11 +10,16 @@
     "preview": "electron-vite preview"
   },
   "dependencies": {
+    "@platejs/basic-nodes": "^52.3.10",
+    "@platejs/code-block": "^52.3.16",
+    "@platejs/list": "^52.3.10",
+    "@platejs/markdown": "^52.0.0",
     "@tanstack/history": "^1.0.5",
     "@tanstack/react-router": "^1.19.3",
-    "marked": "^11.1.1",
+    "platejs": "^52.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "remark-gfm": "^4.0.0",
     "zustand": "^4.5.2"
   },
   "devDependencies": {

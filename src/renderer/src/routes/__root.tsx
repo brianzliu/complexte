@@ -3,6 +3,7 @@ import { useEffect, useCallback } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useDocumentStore } from '../store/useDocumentStore'
 import Sidebar from '../components/Sidebar'
+import TabBar from '../components/TabBar'
 
 export default function Root() {
   const { isSidebarCollapsed, toggleSidebar, createPage, theme } = useDocumentStore()
@@ -52,6 +53,7 @@ export default function Root() {
     <div className={`app-layout ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       <Sidebar onNewPage={handleNewPage} />
       <main className="main-content">
+        <TabBar onNewPage={handleNewPage} />
         <Outlet />
       </main>
     </div>

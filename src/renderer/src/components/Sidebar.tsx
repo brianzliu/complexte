@@ -7,10 +7,19 @@ interface SidebarProps {
   onNewPage: () => void
 }
 
-interface PageContextMenu {
-  id: string
+interface TreeContextMenu {
+  type: 'page' | 'folder'
   x: number
   y: number
+  id?: string
+  path?: string[]
+}
+
+interface PendingDelete {
+  ids: string[]
+  title: string
+  message: string
+  confirmLabel: string
 }
 
 interface TaxonomyNode {
@@ -50,6 +59,13 @@ function sortTree(node: TaxonomyNode): void {
   node.folders.forEach(sortTree)
 }
 
+function collectFolderPages(node: TaxonomyNode): PageMeta[] {
+  return [
+    ...node.pages,
+    ...node.folders.flatMap(folder => collectFolderPages(folder)),
+  ]
+}
+
 export default function Sidebar({ onNewPage }: SidebarProps) {
   const navigate = useNavigate()
   const {
@@ -68,7 +84,10 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
   const [newWorkspaceName, setNewWorkspaceName] = useState('')
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
-  const [contextMenu, setContextMenu] = useState<PageContextMenu | null>(null)
+  const [contextMenu, setContextMenu] = useState<TreeContextMenu | null>(null)
+  const [selectedPageIds, setSelectedPageIds] = useState<Set<string>>(() => new Set())
+  const [isSelectingPages, setIsSelectingPages] = useState(false)
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(
     () => new Set(['Inbox', 'Projects', 'Projects/Roadmap', 'Projects/Design', 'Work', 'Work/Meetings', 'Research', 'Writing']),
   )
@@ -77,7 +96,6 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
   const renameInputRef = useRef<HTMLInputElement>(null)
   const contextMenuRef = useRef<HTMLDivElement>(null)
 
-  const activeWorkspace = workspaces.find(workspace => workspace.id === activeWorkspaceId)
   const workspacePages = pages.filter(page => page.workspaceId === activeWorkspaceId)
   const normalizedSearch = searchQuery.trim().toLowerCase()
   const visiblePages = workspacePages.filter(page => {
@@ -88,6 +106,7 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
   const taxonomyRoot = createNode('root', [])
   visiblePages.forEach(page => addPageToTree(taxonomyRoot, page))
   sortTree(taxonomyRoot)
+  const selectedCount = selectedPageIds.size
 
   useEffect(() => {
     if (isCreatingWorkspace) newWorkspaceInputRef.current?.focus()
@@ -110,6 +129,14 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
     window.addEventListener('mousedown', handleClick)
     return () => window.removeEventListener('mousedown', handleClick)
   }, [contextMenu])
+
+  useEffect(() => {
+    setSelectedPageIds(current => {
+      const workspacePageIds = new Set(workspacePages.map(page => page.id))
+      const next = new Set([...current].filter(id => workspacePageIds.has(id)))
+      return next.size === current.size ? current : next
+    })
+  }, [activeWorkspaceId, pages])
 
   const toggleExpanded = (path: string[]) => {
     const key = path.join('/')
@@ -137,12 +164,21 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
   const handleWorkspaceSelect = (id: string) => {
     setActiveWorkspace(id)
     setSearchQuery('')
+    setIsSelectingPages(false)
+    setSelectedPageIds(new Set())
     navigate({ to: '/' })
   }
 
-  const handleContextMenu = (e: MouseEvent, id: string) => {
+  const handlePageContextMenu = (e: MouseEvent, id: string) => {
     e.preventDefault()
-    setContextMenu({ id, x: e.clientX, y: e.clientY })
+    e.stopPropagation()
+    setContextMenu({ type: 'page', id, x: e.clientX, y: e.clientY })
+  }
+
+  const handleFolderContextMenu = (e: MouseEvent, path: string[]) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setContextMenu({ type: 'folder', path, x: e.clientX, y: e.clientY })
   }
 
   const handleRenameSubmit = (id: string) => {
@@ -158,25 +194,108 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
     setRenameValue(currentName)
   }
 
-  const handleDelete = (id: string) => {
+  const requestPageDelete = (page: PageMeta) => {
     setContextMenu(null)
-    deletePage(id)
-    if (activeId === id) {
+    setPendingDelete({
+      ids: [page.id],
+      title: 'Delete page?',
+      message: `"${page.name}" will be permanently removed.`,
+      confirmLabel: 'Delete page',
+    })
+  }
+
+  const requestFolderDelete = (node: TaxonomyNode) => {
+    const pagesInFolder = collectFolderPages(node)
+    setContextMenu(null)
+    setPendingDelete({
+      ids: pagesInFolder.map(page => page.id),
+      title: 'Delete folder?',
+      message: `"${node.path.join('/')}" contains ${pagesInFolder.length} ${pagesInFolder.length === 1 ? 'page' : 'pages'}. Deleting it will remove every page in that folder.`,
+      confirmLabel: 'Delete folder',
+    })
+  }
+
+  const requestBulkDelete = () => {
+    if (selectedPageIds.size === 0) return
+    setPendingDelete({
+      ids: [...selectedPageIds],
+      title: 'Delete selected pages?',
+      message: `${selectedPageIds.size} ${selectedPageIds.size === 1 ? 'page' : 'pages'} will be permanently removed.`,
+      confirmLabel: 'Delete selected',
+    })
+  }
+
+  const confirmDelete = () => {
+    if (!pendingDelete) return
+    const ids = pendingDelete.ids
+    const shouldNavigateHome = activeId ? ids.includes(activeId) : false
+    ids.forEach(id => deletePage(id))
+    setSelectedPageIds(current => new Set([...current].filter(id => !ids.includes(id))))
+    setPendingDelete(null)
+    setContextMenu(null)
+    if (shouldNavigateHome) {
       navigate({ to: '/' })
     }
+  }
+
+  const togglePageSelection = (id: string) => {
+    setSelectedPageIds(current => {
+      const next = new Set(current)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  const setFolderSelection = (node: TaxonomyNode, selected: boolean) => {
+    const pageIds = collectFolderPages(node).map(page => page.id)
+    setSelectedPageIds(current => {
+      const next = new Set(current)
+      pageIds.forEach(id => {
+        if (selected) {
+          next.add(id)
+        } else {
+          next.delete(id)
+        }
+      })
+      return next
+    })
+  }
+
+  const toggleSelectionMode = () => {
+    setIsSelectingPages(current => {
+      if (current) setSelectedPageIds(new Set())
+      return !current
+    })
   }
 
   const renderFolder = (node: TaxonomyNode, depth: number) => {
     const key = node.path.join('/')
     const isExpanded = normalizedSearch ? true : expandedIds.has(key)
     const itemCount = node.folders.length + node.pages.length
+    const folderPageIds = collectFolderPages(node).map(page => page.id)
+    const selectedFolderPages = folderPageIds.filter(id => selectedPageIds.has(id)).length
+    const isFolderChecked = folderPageIds.length > 0 && selectedFolderPages === folderPageIds.length
+    const isFolderMixed = selectedFolderPages > 0 && selectedFolderPages < folderPageIds.length
 
     return (
       <div key={key} className="page-tree-branch">
-        <button
+        <div
+          role="button"
+          tabIndex={0}
           className="page-tree-item folder"
           style={{ '--depth': depth } as CSSProperties}
           onClick={() => toggleExpanded(node.path)}
+          onContextMenu={e => handleFolderContextMenu(e, node.path)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              toggleExpanded(node.path)
+            }
+          }}
         >
           <span className={`page-disclosure ${isExpanded ? 'expanded' : ''}`}>
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -189,8 +308,21 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
             </svg>
             <span className="page-name">{node.name}</span>
           </span>
+          {isSelectingPages && (
+            <input
+              className="page-select-checkbox"
+              type="checkbox"
+              checked={isFolderChecked}
+              ref={input => {
+                if (input) input.indeterminate = isFolderMixed
+              }}
+              onClick={e => e.stopPropagation()}
+              onChange={e => setFolderSelection(node, e.target.checked)}
+              aria-label={`Select ${node.name}`}
+            />
+          )}
           <span className="folder-count">{itemCount}</span>
-        </button>
+        </div>
 
         {isExpanded && (
           <>
@@ -207,12 +339,18 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
       key={page.id}
       className={`page-tree-item ${activeId === page.id ? 'active' : ''}`}
       style={{ '--depth': depth } as CSSProperties}
-      onContextMenu={e => handleContextMenu(e, page.id)}
+      onContextMenu={e => handlePageContextMenu(e, page.id)}
     >
       <span className="page-disclosure empty" />
       <button
         className="page-row-main"
-        onClick={() => navigate({ to: '/document/$id', params: { id: page.id } })}
+        onClick={() => {
+          if (isSelectingPages) {
+            togglePageSelection(page.id)
+          } else {
+            navigate({ to: '/document/$id', params: { id: page.id } })
+          }
+        }}
       >
         <svg className="page-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -237,6 +375,16 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
           <span className="page-name">{page.name}</span>
         )}
       </button>
+      {isSelectingPages && (
+        <input
+          className="page-select-checkbox"
+          type="checkbox"
+          checked={selectedPageIds.has(page.id)}
+          onClick={e => e.stopPropagation()}
+          onChange={() => togglePageSelection(page.id)}
+          aria-label={`Select ${page.name}`}
+        />
+      )}
     </div>
   )
 
@@ -323,7 +471,7 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
           <input
             type="text"
             className="search-input"
-            placeholder={`Search ${activeWorkspace?.name ?? 'workspace'}`}
+            placeholder="Search"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
           />
@@ -340,13 +488,26 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
 
       <div className="sidebar-list-wrap">
         <div className="sidebar-section-header">
-          <span>Index</span>
-          <button className="section-action-btn" onClick={onNewPage} title="New page">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-          </button>
+          <span>File Tree</span>
+          <div className="section-actions">
+            {isSelectingPages && selectedCount > 0 && (
+              <button className="section-text-btn danger" onClick={requestBulkDelete}>
+                Delete {selectedCount}
+              </button>
+            )}
+            <button
+              className={`section-text-btn ${isSelectingPages ? 'active' : ''}`}
+              onClick={toggleSelectionMode}
+            >
+              {isSelectingPages ? 'Done' : 'Select'}
+            </button>
+            <button className="section-action-btn" onClick={onNewPage} title="New page">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         <div className="page-tree">
@@ -361,10 +522,6 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
       </div>
 
       <div className="sidebar-footer">
-        <div className="workspace-summary">
-          <span>{activeWorkspace?.name ?? 'Workspace'}</span>
-        </div>
-        <div className="workspace-page-count">{workspacePages.length} pages</div>
         <button
           className="icon-btn settings-btn"
           onClick={() => navigate({ to: '/settings' })}
@@ -383,30 +540,71 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
           className="context-menu"
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
-          <button
-            className="context-menu-item"
-            onClick={() => {
-              const page = pages.find(item => item.id === contextMenu.id)
-              if (page) startRename(page.id, page.name)
-            }}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-            </svg>
-            Rename
-          </button>
-          <div className="context-menu-divider" />
+          {contextMenu.type === 'page' && (
+            <button
+              className="context-menu-item"
+              onClick={() => {
+                const page = pages.find(item => item.id === contextMenu.id)
+                if (page) startRename(page.id, page.name)
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+              Rename
+            </button>
+          )}
+          {contextMenu.type === 'page' && <div className="context-menu-divider" />}
           <button
             className="context-menu-item danger"
-            onClick={() => handleDelete(contextMenu.id)}
+            onClick={() => {
+              if (contextMenu.type === 'page') {
+                const page = pages.find(item => item.id === contextMenu.id)
+                if (page) requestPageDelete(page)
+              } else {
+                const findNode = (nodes: TaxonomyNode[]): TaxonomyNode | null => {
+                  for (const node of nodes) {
+                    if (node.path.join('/') === contextMenu.path?.join('/')) return node
+                    const match = findNode(node.folders)
+                    if (match) return match
+                  }
+                  return null
+                }
+                const node = findNode(taxonomyRoot.folders)
+                if (node) requestFolderDelete(node)
+              }
+            }}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="3 6 5 6 21 6" />
               <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
             </svg>
-            Delete page
+            {contextMenu.type === 'page' ? 'Delete page' : 'Delete folder'}
           </button>
+        </div>
+      )}
+
+      {pendingDelete && (
+        <div className="confirm-overlay" role="presentation" onMouseDown={() => setPendingDelete(null)}>
+          <div
+            className="confirm-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-confirm-title"
+            onMouseDown={e => e.stopPropagation()}
+          >
+            <div className="confirm-title" id="delete-confirm-title">{pendingDelete.title}</div>
+            <div className="confirm-message">{pendingDelete.message}</div>
+            <div className="confirm-actions">
+              <button className="dialog-btn" onClick={() => setPendingDelete(null)}>
+                Cancel
+              </button>
+              <button className="dialog-btn danger" onClick={confirmDelete}>
+                {pendingDelete.confirmLabel}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </aside>
