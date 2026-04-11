@@ -1,4 +1,3 @@
-import { useNavigate } from '@tanstack/react-router'
 import { FormEvent, useMemo, useState } from 'react'
 import { generateDocument } from '../lib/openRouter'
 import { useDocumentStore } from '../store/useDocumentStore'
@@ -22,15 +21,15 @@ function deriveTitle(markdown: string, fallback: string): string {
 }
 
 export default function DocumentStarter({ pageId }: { pageId: string }) {
-  const navigate = useNavigate()
   const { aiSettings, initializePage, setPageContent } = useDocumentStore()
   const [prompt, setPrompt] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
+  const hasOpenRouterKey = aiSettings.openRouterApiKey.trim().length > 0
 
   const canGenerate = useMemo(
-    () => prompt.trim().length > 0 && aiSettings.openRouterApiKey.trim().length > 0 && !isGenerating,
-    [aiSettings.openRouterApiKey, isGenerating, prompt],
+    () => prompt.trim().length > 0 && hasOpenRouterKey && !isGenerating,
+    [hasOpenRouterKey, isGenerating, prompt],
   )
 
   const handleGenerate = async (event: FormEvent<HTMLFormElement>) => {
@@ -66,11 +65,7 @@ export default function DocumentStarter({ pageId }: { pageId: string }) {
     <div className="document-starter">
       <div className="document-starter-inner">
         <div className="document-starter-copy">
-          <p className="document-starter-eyebrow">New document</p>
           <h2 className="document-starter-title">What are you thinking of?</h2>
-          <p className="document-starter-subtitle">
-            Describe the document you want, then start from a generated draft.
-          </p>
         </div>
 
         <form className="prompt-composer" onSubmit={handleGenerate}>
@@ -97,19 +92,16 @@ export default function DocumentStarter({ pageId }: { pageId: string }) {
             >
               Start with a blank document
             </button>
-            {!aiSettings.openRouterApiKey.trim() && (
-              <button
-                type="button"
-                className="prompt-secondary-btn"
-                onClick={() => navigate({ to: '/settings' })}
-                disabled={isGenerating}
-              >
-                Add OpenRouter key
+            <span className="prompt-submit-wrap">
+              <button type="submit" className="prompt-primary-btn" disabled={!canGenerate}>
+                {isGenerating ? 'Generating...' : 'Generate draft'}
               </button>
-            )}
-            <button type="submit" className="prompt-primary-btn" disabled={!canGenerate}>
-              {isGenerating ? 'Generating...' : 'Generate draft'}
-            </button>
+              {!hasOpenRouterKey && (
+                <span className="prompt-key-tooltip" role="dialog">
+                  Go to Settings to configure your OpenRouter key.
+                </span>
+              )}
+            </span>
           </div>
         </form>
 
