@@ -2,6 +2,7 @@ import { useParams } from '@tanstack/react-router'
 import { useEffect } from 'react'
 import { useDocumentStore } from '../store/useDocumentStore'
 import Editor from '../components/Editor'
+import DocumentStarter from '../components/DocumentStarter'
 
 export default function DocumentPage() {
   const { id } = useParams({ strict: false }) as { id: string }
@@ -46,7 +47,9 @@ export default function DocumentPage() {
           })}
         </nav>
       </div>
-      {activeId === id && <Editor key={id} />}
+      {activeId === id && (
+        page?.isInitialized ? <Editor key={id} /> : <DocumentStarter pageId={id} />
+      )}
     </div>
   )
 }

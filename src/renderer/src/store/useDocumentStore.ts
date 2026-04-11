@@ -2,12 +2,35 @@ import { create } from 'zustand'
 
 export type Theme = 'dark' | 'light' | 'auto'
 
+export interface AiSettings {
+  openRouterApiKey: string
+  openRouterModel: string
+}
+
 function loadTheme(): Theme {
   try {
     const v = localStorage.getItem('complexte-theme')
     if (v === 'dark' || v === 'light' || v === 'auto') return v as Theme
   } catch {}
   return 'dark'
+}
+
+function loadAiSettings(): AiSettings {
+  try {
+    const raw = localStorage.getItem('complexte-ai-settings')
+    if (raw) {
+      const settings = JSON.parse(raw) as Partial<AiSettings>
+      return {
+        openRouterApiKey: settings.openRouterApiKey ?? '',
+        openRouterModel: settings.openRouterModel ?? 'openai/gpt-5.2',
+      }
+    }
+  } catch {}
+
+  return {
+    openRouterApiKey: '',
+    openRouterModel: 'openai/gpt-5.2',
+  }
 }
 
 export interface Workspace {
@@ -23,6 +46,7 @@ export interface PageMeta {
   indexedPath: string[]
   modified: string
   order: number
+  isInitialized: boolean
 }
 
 const MOCK_CONTENT: Record<string, string> = {
@@ -110,13 +134,13 @@ const INITIAL_WORKSPACES: Workspace[] = [
 ]
 
 const INITIAL_PAGES: PageMeta[] = [
-  { id: 'getting-started', workspaceId: 'personal', name: 'Getting Started', indexedPath: ['Inbox'], modified: new Date(2026, 3, 11, 9, 0).toISOString(), order: 0 },
-  { id: 'project-roadmap', workspaceId: 'personal', name: 'Project Roadmap', indexedPath: ['Projects', 'Roadmap'], modified: new Date(2026, 3, 10, 14, 30).toISOString(), order: 1 },
-  { id: 'meeting-notes', workspaceId: 'personal', name: 'Meeting Notes', indexedPath: ['Work', 'Meetings'], modified: new Date(2026, 3, 11, 10, 15).toISOString(), order: 2 },
-  { id: 'design-philosophy', workspaceId: 'personal', name: 'Design Philosophy', indexedPath: ['Projects', 'Design'], modified: new Date(2026, 3, 8, 16, 0).toISOString(), order: 3 },
-  { id: 'scratch', workspaceId: 'personal', name: 'Scratch Pad', indexedPath: ['Inbox'], modified: new Date(2026, 3, 11, 8, 45).toISOString(), order: 4 },
-  { id: 'research', workspaceId: 'client-work', name: 'Research', indexedPath: ['Research'], modified: new Date(2026, 3, 9, 11, 30).toISOString(), order: 0 },
-  { id: 'drafts', workspaceId: 'client-work', name: 'Drafts', indexedPath: ['Writing', 'Drafts'], modified: new Date(2026, 3, 9, 12, 15).toISOString(), order: 1 },
+  { id: 'getting-started', workspaceId: 'personal', name: 'Getting Started', indexedPath: ['Inbox'], modified: new Date(2026, 3, 11, 9, 0).toISOString(), order: 0, isInitialized: true },
+  { id: 'project-roadmap', workspaceId: 'personal', name: 'Project Roadmap', indexedPath: ['Projects', 'Roadmap'], modified: new Date(2026, 3, 10, 14, 30).toISOString(), order: 1, isInitialized: true },
+  { id: 'meeting-notes', workspaceId: 'personal', name: 'Meeting Notes', indexedPath: ['Work', 'Meetings'], modified: new Date(2026, 3, 11, 10, 15).toISOString(), order: 2, isInitialized: true },
+  { id: 'design-philosophy', workspaceId: 'personal', name: 'Design Philosophy', indexedPath: ['Projects', 'Design'], modified: new Date(2026, 3, 8, 16, 0).toISOString(), order: 3, isInitialized: true },
+  { id: 'scratch', workspaceId: 'personal', name: 'Scratch Pad', indexedPath: ['Inbox'], modified: new Date(2026, 3, 11, 8, 45).toISOString(), order: 4, isInitialized: true },
+  { id: 'research', workspaceId: 'client-work', name: 'Research', indexedPath: ['Research'], modified: new Date(2026, 3, 9, 11, 30).toISOString(), order: 0, isInitialized: true },
+  { id: 'drafts', workspaceId: 'client-work', name: 'Drafts', indexedPath: ['Writing', 'Drafts'], modified: new Date(2026, 3, 9, 12, 15).toISOString(), order: 1, isInitialized: true },
 ]
 
 let contentStore: Record<string, string> = { ...MOCK_CONTENT }
@@ -180,10 +204,13 @@ interface DocumentStore {
   content: string
   isSidebarCollapsed: boolean
   theme: Theme
+  aiSettings: AiSettings
 
   openPage: (id: string) => void
   closeTab: (id: string) => string | null
   setContent: (content: string) => void
+  setPageContent: (id: string, content: string, options?: { initialize?: boolean; name?: string }) => void
+  initializePage: (id: string) => void
   saveDocument: () => void
   createWorkspace: (name: string) => Workspace
   setActiveWorkspace: (id: string) => void
@@ -192,6 +219,7 @@ interface DocumentStore {
   renamePage: (id: string, newName: string) => void
   toggleSidebar: () => void
   setTheme: (theme: Theme) => void
+  setAiSettings: (settings: Partial<AiSettings>) => void
   getPageContent: (id: string) => string
 }
 
@@ -204,6 +232,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   content: '',
   isSidebarCollapsed: false,
   theme: loadTheme(),
+  aiSettings: loadAiSettings(),
 
   openPage: (id: string) => {
     const page = get().pages.find(item => item.id === id)
@@ -246,6 +275,45 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     }
   },
 
+  setPageContent: (id: string, content: string, options = {}) => {
+    const { activeId, pages, workspaces } = get()
+    const page = pages.find(item => item.id === id)
+    if (!page) return
+
+    const modified = new Date().toISOString()
+    const workspacePages = pages.filter(item => item.workspaceId === page.workspaceId)
+    const indexedPath = inferIndexedPath(options.name ?? page.name, content, workspacePages)
+    contentStore[id] = content
+
+    set({
+      content: activeId === id ? content : get().content,
+      pages: pages.map(item => item.id === id
+        ? {
+            ...item,
+            name: options.name ?? item.name,
+            indexedPath,
+            modified,
+            isInitialized: options.initialize ? true : item.isInitialized,
+          }
+        : item,
+      ),
+      workspaces: workspaces.map(workspace =>
+        workspace.id === page.workspaceId ? { ...workspace, modified } : workspace,
+      ),
+    })
+  },
+
+  initializePage: (id: string) => {
+    const modified = new Date().toISOString()
+    set(state => ({
+      pages: state.pages.map(page => page.id === id ? { ...page, isInitialized: true, modified } : page),
+      workspaces: state.workspaces.map(workspace => {
+        const page = state.pages.find(item => item.id === id)
+        return page?.workspaceId === workspace.id ? { ...workspace, modified } : workspace
+      }),
+    }))
+  },
+
   saveDocument: () => {
     const { activeId, content, pages, workspaces } = get()
     if (!activeId) return
@@ -258,7 +326,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const indexedPath = inferIndexedPath(page.name, content, workspacePages)
     contentStore[activeId] = content
     set({
-      pages: pages.map(item => item.id === activeId ? { ...item, indexedPath, modified } : item),
+      pages: pages.map(item => item.id === activeId ? { ...item, indexedPath, modified, isInitialized: true } : item),
       workspaces: workspaces.map(workspace =>
         workspace.id === page.workspaceId ? { ...workspace, modified } : workspace,
       ),
@@ -297,8 +365,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       indexedPath: ['Inbox'],
       modified: new Date().toISOString(),
       order: siblingCount,
+      isInitialized: false,
     }
-    contentStore[id] = `# ${name}\n\n`
+    contentStore[id] = ''
     set(state => ({
       pages: [...state.pages, page],
       openTabIds: [...state.openTabIds, id],
@@ -335,6 +404,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   setTheme: (theme: Theme) => {
     try { localStorage.setItem('complexte-theme', theme) } catch {}
     set({ theme })
+  },
+
+  setAiSettings: (settings: Partial<AiSettings>) => {
+    const nextSettings = { ...get().aiSettings, ...settings }
+    try { localStorage.setItem('complexte-ai-settings', JSON.stringify(nextSettings)) } catch {}
+    set({ aiSettings: nextSettings })
   },
 
   getPageContent: (id: string) => contentStore[id] ?? '',

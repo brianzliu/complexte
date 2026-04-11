@@ -10,7 +10,7 @@ const THEME_OPTIONS: { value: Theme; label: string; description: string }[] = [
 
 export default function SettingsPage() {
   const navigate = useNavigate()
-  const { theme, setTheme } = useDocumentStore()
+  const { aiSettings, setAiSettings, theme, setTheme } = useDocumentStore()
 
   return (
     <div className="settings-page">
@@ -57,6 +57,40 @@ export default function SettingsPage() {
                 </button>
               ))}
             </div>
+          </div>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-section-header">
+            <h2 className="settings-section-title">AI drafts</h2>
+            <p className="settings-section-desc">Use your own OpenRouter key to generate new document drafts.</p>
+          </div>
+
+          <div className="settings-field">
+            <label className="settings-field-label" htmlFor="openrouter-api-key">OpenRouter API key</label>
+            <input
+              id="openrouter-api-key"
+              className="settings-input"
+              type="password"
+              value={aiSettings.openRouterApiKey}
+              onChange={event => setAiSettings({ openRouterApiKey: event.target.value })}
+              placeholder="sk-or-v1-..."
+              spellCheck={false}
+            />
+          </div>
+
+          <div className="settings-field">
+            <label className="settings-field-label" htmlFor="openrouter-model">Model</label>
+            <input
+              id="openrouter-model"
+              className="settings-input"
+              type="text"
+              value={aiSettings.openRouterModel}
+              onChange={event => setAiSettings({ openRouterModel: event.target.value })}
+              placeholder="openai/gpt-5.2"
+              spellCheck={false}
+            />
+            <p className="settings-field-hint">Leave blank to use your OpenRouter account default.</p>
           </div>
         </div>
 
