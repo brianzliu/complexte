@@ -5,19 +5,19 @@ import { useDocumentStore } from '../store/useDocumentStore'
 import Sidebar from '../components/Sidebar'
 
 export default function Root() {
-  const { isSidebarCollapsed, toggleSidebar, createDocument } = useDocumentStore()
+  const { isSidebarCollapsed, toggleSidebar, createPage } = useDocumentStore()
   const navigate = useNavigate()
 
-  const handleNewDocument = useCallback(() => {
-    const doc = createDocument('Untitled')
-    navigate({ to: '/document/$id', params: { id: doc.id } })
-  }, [createDocument, navigate])
+  const handleNewPage = useCallback(() => {
+    const page = createPage('Untitled')
+    navigate({ to: '/document/$id', params: { id: page.id } })
+  }, [createPage, navigate])
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
         e.preventDefault()
-        handleNewDocument()
+        handleNewPage()
       }
       if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
         e.preventDefault()
@@ -26,11 +26,11 @@ export default function Root() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [handleNewDocument, toggleSidebar])
+  }, [handleNewPage, toggleSidebar])
 
   return (
     <div className={`app-layout ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
-      <Sidebar onNewDocument={handleNewDocument} />
+      <Sidebar onNewPage={handleNewPage} />
       <main className="main-content">
         <Outlet />
       </main>

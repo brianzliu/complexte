@@ -1,45 +1,97 @@
 import { useNavigate } from '@tanstack/react-router'
 import { useState, useRef, useEffect } from 'react'
-import { useDocumentStore } from '../store/useDocumentStore'
+import type { CSSProperties, MouseEvent } from 'react'
+import { PageMeta, useDocumentStore } from '../store/useDocumentStore'
 
 interface SidebarProps {
-  onNewDocument: () => void
+  onNewPage: () => void
 }
 
-function formatDate(iso: string): string {
-  const d = new Date(iso)
-  const now = new Date()
-  const diffMs = now.getTime() - d.getTime()
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-  if (diffDays === 0) return 'Today'
-  if (diffDays === 1) return 'Yesterday'
-  if (diffDays < 7) return `${diffDays}d ago`
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+interface PageContextMenu {
+  id: string
+  x: number
+  y: number
 }
 
-export default function Sidebar({ onNewDocument }: SidebarProps) {
+interface TaxonomyNode {
+  name: string
+  path: string[]
+  folders: TaxonomyNode[]
+  pages: PageMeta[]
+}
+
+function sortPages(a: PageMeta, b: PageMeta): number {
+  return a.order - b.order || a.name.localeCompare(b.name)
+}
+
+function createNode(name: string, path: string[]): TaxonomyNode {
+  return { name, path, folders: [], pages: [] }
+}
+
+function addPageToTree(root: TaxonomyNode, page: PageMeta): void {
+  const segments = page.indexedPath.length ? page.indexedPath : ['Unsorted']
+  let current = root
+
+  segments.forEach(segment => {
+    let child = current.folders.find(folder => folder.name === segment)
+    if (!child) {
+      child = createNode(segment, [...current.path, segment])
+      current.folders.push(child)
+    }
+    current = child
+  })
+
+  current.pages.push(page)
+}
+
+function sortTree(node: TaxonomyNode): void {
+  node.folders.sort((a, b) => a.name.localeCompare(b.name))
+  node.pages.sort(sortPages)
+  node.folders.forEach(sortTree)
+}
+
+export default function Sidebar({ onNewPage }: SidebarProps) {
   const navigate = useNavigate()
-  const { documents, activeId, deleteDocument, renameDocument } = useDocumentStore()
+  const {
+    activeId,
+    activeWorkspaceId,
+    createWorkspace,
+    deletePage,
+    pages,
+    renamePage,
+    setActiveWorkspace,
+    workspaces,
+  } = useDocumentStore()
 
   const [searchQuery, setSearchQuery] = useState('')
-  const [isCreating, setIsCreating] = useState(false)
-  const [newDocName, setNewDocName] = useState('')
+  const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false)
+  const [newWorkspaceName, setNewWorkspaceName] = useState('')
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
-  const [contextMenuId, setContextMenuId] = useState<string | null>(null)
-  const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 })
+  const [contextMenu, setContextMenu] = useState<PageContextMenu | null>(null)
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(
+    () => new Set(['Inbox', 'Projects', 'Projects/Roadmap', 'Projects/Design', 'Work', 'Work/Meetings', 'Research', 'Writing']),
+  )
 
-  const newDocInputRef = useRef<HTMLInputElement>(null)
+  const newWorkspaceInputRef = useRef<HTMLInputElement>(null)
   const renameInputRef = useRef<HTMLInputElement>(null)
   const contextMenuRef = useRef<HTMLDivElement>(null)
 
-  const filteredDocs = documents.filter(d =>
-    d.name.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const activeWorkspace = workspaces.find(workspace => workspace.id === activeWorkspaceId)
+  const workspacePages = pages.filter(page => page.workspaceId === activeWorkspaceId)
+  const normalizedSearch = searchQuery.trim().toLowerCase()
+  const visiblePages = workspacePages.filter(page => {
+    if (!normalizedSearch) return true
+    return `${page.name} ${page.indexedPath.join(' ')}`.toLowerCase().includes(normalizedSearch)
+  })
+
+  const taxonomyRoot = createNode('root', [])
+  visiblePages.forEach(page => addPageToTree(taxonomyRoot, page))
+  sortTree(taxonomyRoot)
 
   useEffect(() => {
-    if (isCreating) newDocInputRef.current?.focus()
-  }, [isCreating])
+    if (isCreatingWorkspace) newWorkspaceInputRef.current?.focus()
+  }, [isCreatingWorkspace])
 
   useEffect(() => {
     if (renamingId) {
@@ -49,66 +101,167 @@ export default function Sidebar({ onNewDocument }: SidebarProps) {
   }, [renamingId])
 
   useEffect(() => {
-    if (!contextMenuId) return
-    const handleClick = (e: MouseEvent) => {
+    if (!contextMenu) return
+    const handleClick = (e: globalThis.MouseEvent) => {
       if (!contextMenuRef.current?.contains(e.target as Node)) {
-        setContextMenuId(null)
+        setContextMenu(null)
       }
     }
     window.addEventListener('mousedown', handleClick)
     return () => window.removeEventListener('mousedown', handleClick)
-  }, [contextMenuId])
+  }, [contextMenu])
 
-  const handleContextMenu = (e: React.MouseEvent, id: string) => {
-    e.preventDefault()
-    setContextMenuId(id)
-    setContextMenuPos({ x: e.clientX, y: e.clientY })
+  const toggleExpanded = (path: string[]) => {
+    const key = path.join('/')
+    setExpandedIds(current => {
+      const next = new Set(current)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+      }
+      return next
+    })
   }
 
-  const handleCreateSubmit = () => {
-    if (newDocName.trim()) {
-      onNewDocument()
+  const handleCreateWorkspaceSubmit = () => {
+    const name = newWorkspaceName.trim()
+    if (name) {
+      createWorkspace(name)
+      navigate({ to: '/' })
     }
-    setIsCreating(false)
-    setNewDocName('')
+    setIsCreatingWorkspace(false)
+    setNewWorkspaceName('')
+  }
+
+  const handleWorkspaceSelect = (id: string) => {
+    setActiveWorkspace(id)
+    setSearchQuery('')
+    navigate({ to: '/' })
+  }
+
+  const handleContextMenu = (e: MouseEvent, id: string) => {
+    e.preventDefault()
+    setContextMenu({ id, x: e.clientX, y: e.clientY })
   }
 
   const handleRenameSubmit = (id: string) => {
     if (renameValue.trim()) {
-      renameDocument(id, renameValue.trim())
+      renamePage(id, renameValue.trim())
     }
     setRenamingId(null)
   }
 
-  const startCreate = () => {
-    setIsCreating(true)
-    setNewDocName('')
-  }
-
   const startRename = (id: string, currentName: string) => {
-    setContextMenuId(null)
+    setContextMenu(null)
     setRenamingId(id)
     setRenameValue(currentName)
   }
 
   const handleDelete = (id: string) => {
-    setContextMenuId(null)
-    deleteDocument(id)
+    setContextMenu(null)
+    deletePage(id)
     if (activeId === id) {
       navigate({ to: '/' })
     }
   }
 
+  const renderFolder = (node: TaxonomyNode, depth: number) => {
+    const key = node.path.join('/')
+    const isExpanded = normalizedSearch ? true : expandedIds.has(key)
+    const itemCount = node.folders.length + node.pages.length
+
+    return (
+      <div key={key} className="page-tree-branch">
+        <button
+          className="page-tree-item folder"
+          style={{ '--depth': depth } as CSSProperties}
+          onClick={() => toggleExpanded(node.path)}
+        >
+          <span className={`page-disclosure ${isExpanded ? 'expanded' : ''}`}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </span>
+          <span className="page-row-main">
+            <svg className="page-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+            </svg>
+            <span className="page-name">{node.name}</span>
+          </span>
+          <span className="folder-count">{itemCount}</span>
+        </button>
+
+        {isExpanded && (
+          <>
+            {node.folders.map(folder => renderFolder(folder, depth + 1))}
+            {node.pages.map(page => renderPage(page, depth + 1))}
+          </>
+        )}
+      </div>
+    )
+  }
+
+  const renderPage = (page: PageMeta, depth: number) => (
+    <div
+      key={page.id}
+      className={`page-tree-item ${activeId === page.id ? 'active' : ''}`}
+      style={{ '--depth': depth } as CSSProperties}
+      onContextMenu={e => handleContextMenu(e, page.id)}
+    >
+      <span className="page-disclosure empty" />
+      <button
+        className="page-row-main"
+        onClick={() => navigate({ to: '/document/$id', params: { id: page.id } })}
+      >
+        <svg className="page-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+        </svg>
+
+        {renamingId === page.id ? (
+          <input
+            ref={renameInputRef}
+            className="inline-input"
+            type="text"
+            value={renameValue}
+            onChange={e => setRenameValue(e.target.value)}
+            onClick={e => e.stopPropagation()}
+            onBlur={() => handleRenameSubmit(page.id)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') handleRenameSubmit(page.id)
+              if (e.key === 'Escape') setRenamingId(null)
+            }}
+          />
+        ) : (
+          <span className="page-name">{page.name}</span>
+        )}
+      </button>
+    </div>
+  )
+
   return (
     <aside className="sidebar">
-      {/* ── Header ── */}
-      <div className="sidebar-header">
-        <div className="app-brand">
-          <img className="app-brand-logo" src="/favicon.svg" alt="" draggable={false} />
-          <span className="app-brand-name">Complexte</span>
-        </div>
+      <div className="sidebar-header compact">
+        <button className="sidebar-home-btn" onClick={() => navigate({ to: '/' })} title="Home">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m3 10 9-7 9 7" />
+            <path d="M5 10v10h14V10" />
+          </svg>
+          <span>Home</span>
+        </button>
 
-        <button className="icon-btn" onClick={startCreate} title="New document (⌘N)">
+        <div className="sidebar-header-spacer" />
+
+        <button className="icon-btn" onClick={() => setIsCreatingWorkspace(true)} title="New workspace">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 10v6" />
+            <path d="M9 13h6" />
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+          </svg>
+        </button>
+
+        <button className="icon-btn" onClick={onNewPage} title="New page (⌘N)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
@@ -116,7 +269,51 @@ export default function Sidebar({ onNewDocument }: SidebarProps) {
         </button>
       </div>
 
-      {/* ── Search ── */}
+      <div className="workspace-panel">
+        <div className="sidebar-section-header">
+          <span>Workspaces</span>
+          <span className="sidebar-section-count">{workspaces.length}</span>
+        </div>
+
+        <div className="workspace-list">
+          {workspaces.map(workspace => (
+            <button
+              key={workspace.id}
+              className={`workspace-item ${workspace.id === activeWorkspaceId ? 'active' : ''}`}
+              onClick={() => handleWorkspaceSelect(workspace.id)}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 4h16v16H4z" />
+                <path d="M8 8h8" />
+                <path d="M8 12h5" />
+              </svg>
+              <span>{workspace.name}</span>
+            </button>
+          ))}
+        </div>
+
+        {isCreatingWorkspace && (
+          <div className="workspace-create-row">
+            <input
+              ref={newWorkspaceInputRef}
+              className="inline-input"
+              type="text"
+              value={newWorkspaceName}
+              placeholder="Workspace name"
+              onChange={e => setNewWorkspaceName(e.target.value)}
+              onBlur={handleCreateWorkspaceSubmit}
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleCreateWorkspaceSubmit()
+                if (e.key === 'Escape') {
+                  setIsCreatingWorkspace(false)
+                  setNewWorkspaceName('')
+                }
+              }}
+            />
+          </div>
+        )}
+      </div>
+
       <div className="sidebar-search-wrap">
         <div className="sidebar-search">
           <svg className="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -126,7 +323,7 @@ export default function Sidebar({ onNewDocument }: SidebarProps) {
           <input
             type="text"
             className="search-input"
-            placeholder="Search"
+            placeholder={`Search ${activeWorkspace?.name ?? 'workspace'}`}
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
           />
@@ -141,106 +338,46 @@ export default function Sidebar({ onNewDocument }: SidebarProps) {
         </div>
       </div>
 
-      {/* ── Document List ── */}
       <div className="sidebar-list-wrap">
         <div className="sidebar-section-header">
-          <span>Documents</span>
-          <span className="sidebar-section-count">{filteredDocs.length}</span>
+          <span>Index</span>
+          <button className="section-action-btn" onClick={onNewPage} title="New page">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
         </div>
 
-        <div className="doc-list">
-          {/* Inline create input */}
-          {isCreating && (
-            <div className="doc-item creating">
-              <svg className="doc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <polyline points="14 2 14 8 20 8" />
-              </svg>
-              <input
-                ref={newDocInputRef}
-                className="inline-input"
-                type="text"
-                value={newDocName}
-                placeholder="Document name…"
-                onChange={e => setNewDocName(e.target.value)}
-                onBlur={handleCreateSubmit}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') handleCreateSubmit()
-                  if (e.key === 'Escape') { setIsCreating(false); setNewDocName('') }
-                }}
-              />
-            </div>
-          )}
-
-          {filteredDocs.length === 0 && !isCreating && (
+        <div className="page-tree">
+          {taxonomyRoot.folders.length === 0 && (
             <div className="doc-empty">
-              {searchQuery ? 'No results' : 'No documents yet'}
+              {searchQuery ? 'No matching pages' : 'No indexed pages'}
             </div>
           )}
 
-          {filteredDocs.map(doc => (
-            <div
-              key={doc.id}
-              className={`doc-item ${activeId === doc.id ? 'active' : ''}`}
-              onClick={() => navigate({ to: '/document/$id', params: { id: doc.id } })}
-              onContextMenu={e => handleContextMenu(e, doc.id)}
-            >
-              <svg className="doc-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <polyline points="14 2 14 8 20 8" />
-                <line x1="16" y1="13" x2="8" y2="13" />
-                <line x1="16" y1="17" x2="8" y2="17" />
-                <polyline points="10 9 9 9 8 9" />
-              </svg>
-
-              {renamingId === doc.id ? (
-                <input
-                  ref={renameInputRef}
-                  className="inline-input"
-                  type="text"
-                  value={renameValue}
-                  onChange={e => setRenameValue(e.target.value)}
-                  onClick={e => e.stopPropagation()}
-                  onBlur={() => handleRenameSubmit(doc.id)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') handleRenameSubmit(doc.id)
-                    if (e.key === 'Escape') setRenamingId(null)
-                  }}
-                />
-              ) : (
-                <div className="doc-info">
-                  <span className="doc-name">{doc.name}</span>
-                  <span className="doc-date">{formatDate(doc.modified)}</span>
-                </div>
-              )}
-            </div>
-          ))}
+          {taxonomyRoot.folders.map(folder => renderFolder(folder, 0))}
         </div>
       </div>
 
-      {/* ── Footer ── */}
       <div className="sidebar-footer">
-        <div className="vault-indicator">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-          </svg>
-          <span>My Vault</span>
+        <div className="workspace-summary">
+          <span>{activeWorkspace?.name ?? 'Workspace'}</span>
         </div>
-        <div className="vault-doc-count">{documents.length} docs</div>
+        <div className="workspace-page-count">{workspacePages.length} pages</div>
       </div>
 
-      {/* ── Context Menu ── */}
-      {contextMenuId && (
+      {contextMenu && (
         <div
           ref={contextMenuRef}
           className="context-menu"
-          style={{ left: contextMenuPos.x, top: contextMenuPos.y }}
+          style={{ left: contextMenu.x, top: contextMenu.y }}
         >
           <button
             className="context-menu-item"
             onClick={() => {
-              const doc = documents.find(d => d.id === contextMenuId)
-              if (doc) startRename(doc.id, doc.name)
+              const page = pages.find(item => item.id === contextMenu.id)
+              if (page) startRename(page.id, page.name)
             }}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -252,13 +389,13 @@ export default function Sidebar({ onNewDocument }: SidebarProps) {
           <div className="context-menu-divider" />
           <button
             className="context-menu-item danger"
-            onClick={() => handleDelete(contextMenuId)}
+            onClick={() => handleDelete(contextMenu.id)}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="3 6 5 6 21 6" />
               <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
             </svg>
-            Delete
+            Delete page
           </button>
         </div>
       )}

@@ -5,13 +5,13 @@ import Editor from '../components/Editor'
 
 export default function DocumentPage() {
   const { id } = useParams({ strict: false }) as { id: string }
-  const { openDocument, documents, activeId, toggleSidebar, isSidebarCollapsed } = useDocumentStore()
+  const { openPage, pages, activeId, toggleSidebar, isSidebarCollapsed } = useDocumentStore()
 
   useEffect(() => {
-    openDocument(id)
+    openPage(id)
   }, [id])
 
-  const doc = documents.find(d => d.id === id)
+  const page = pages.find(item => item.id === id)
 
   return (
     <div className="document-page">
@@ -26,7 +26,7 @@ export default function DocumentPage() {
             <line x1="9" y1="3" x2="9" y2="21" />
           </svg>
         </button>
-        <h1 className="document-title">{doc?.name ?? 'Untitled'}</h1>
+        <h1 className="document-title">{page?.name ?? 'Untitled'}</h1>
       </div>
       {activeId === id && <Editor />}
     </div>

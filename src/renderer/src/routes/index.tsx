@@ -2,15 +2,17 @@ import { useNavigate } from '@tanstack/react-router'
 import { useDocumentStore } from '../store/useDocumentStore'
 
 export default function IndexPage() {
-  const { createDocument, documents } = useDocumentStore()
+  const { activeWorkspaceId, createPage, pages, workspaces } = useDocumentStore()
   const navigate = useNavigate()
+  const activeWorkspace = workspaces.find(workspace => workspace.id === activeWorkspaceId)
 
-  const handleNewDocument = () => {
-    const doc = createDocument('Untitled')
-    navigate({ to: '/document/$id', params: { id: doc.id } })
+  const handleNewPage = () => {
+    const page = createPage('Untitled')
+    navigate({ to: '/document/$id', params: { id: page.id } })
   }
 
-  const recentDocs = [...documents]
+  const recentPages = pages
+    .filter(page => page.workspaceId === activeWorkspaceId)
     .sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime())
     .slice(0, 3)
 
@@ -29,31 +31,31 @@ export default function IndexPage() {
         </div>
 
         <h1 className="welcome-greeting">{greeting()}</h1>
-        <p className="welcome-sub">What would you like to work on?</p>
+        <p className="welcome-sub">{activeWorkspace?.name ?? 'Workspace'}</p>
 
-        <button className="welcome-new-btn" onClick={handleNewDocument}>
+        <button className="welcome-new-btn" onClick={handleNewPage}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
-          New Document
+          New Page
         </button>
 
-        {recentDocs.length > 0 && (
+        {recentPages.length > 0 && (
           <div className="welcome-recent">
             <p className="welcome-recent-label">Recent</p>
             <div className="welcome-recent-list">
-              {recentDocs.map(doc => (
+              {recentPages.map(page => (
                 <button
-                  key={doc.id}
+                  key={page.id}
                   className="welcome-recent-item"
-                  onClick={() => navigate({ to: '/document/$id', params: { id: doc.id } })}
+                  onClick={() => navigate({ to: '/document/$id', params: { id: page.id } })}
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                     <polyline points="14 2 14 8 20 8" />
                   </svg>
-                  <span>{doc.name}</span>
+                  <span>{page.name}</span>
                 </button>
               ))}
             </div>
@@ -66,7 +68,7 @@ export default function IndexPage() {
               <div className="shortcut-keys">
                 <kbd>⌘</kbd><kbd>N</kbd>
               </div>
-              <span>New document</span>
+              <span>New page</span>
             </div>
             <div className="shortcut-item">
               <div className="shortcut-keys">

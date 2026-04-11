@@ -1,26 +1,32 @@
 import { create } from 'zustand'
 
-export interface DocumentMeta {
+export interface Workspace {
   id: string
   name: string
   modified: string
 }
 
+export interface PageMeta {
+  id: string
+  workspaceId: string
+  name: string
+  indexedPath: string[]
+  modified: string
+  order: number
+}
+
 const MOCK_CONTENT: Record<string, string> = {
   'getting-started': `# Getting Started
 
-Welcome to **Complexte** — a sophisticated document workspace designed for focused writing.
+Welcome to **Complexte** — a focused workspace for linked notes and writing.
 
-## Features
+## What changed
 
-- Live markdown preview with split-pane editing
-- Fast document search and navigation
-- Clean, distraction-free interface
-- Automatic saving as you type
+- Workspaces keep separate sets of pages
+- Pages are indexed into workspace-local paths
+- The sidebar reflects the index instead of manual folders
 
 ## Writing in Markdown
-
-Complexte uses standard Markdown syntax. Here are some examples:
 
 \`\`\`
 # Heading 1
@@ -31,25 +37,8 @@ Complexte uses standard Markdown syntax. Here are some examples:
 - Unordered list item
 - Another item
 
-1. Ordered list
-2. Second item
-
 > Blockquote for emphasis
-
-[Link text](https://example.com)
 \`\`\`
-
-## Keyboard Shortcuts
-
-| Action | Shortcut |
-|--------|----------|
-| New document | ⌘N |
-| Save | ⌘S |
-| Toggle sidebar | ⌘\\ |
-
----
-
-> "Simplicity is the ultimate sophistication." — Leonardo da Vinci
 `,
 
   'project-roadmap': `# Project Roadmap
@@ -57,61 +46,23 @@ Complexte uses standard Markdown syntax. Here are some examples:
 ## Q2 2026
 
 ### In Progress
-- [ ] Implement full-text search across all documents
-- [ ] Add folder/tag organization system
+- [ ] Add persistent workspace storage
 - [x] Split-pane markdown editor with live preview
-- [x] Document creation, renaming, and deletion
+- [x] Workspace and indexed page navigation
 
 ### Upcoming
-- [ ] Sync across devices via end-to-end encrypted vault
-- [ ] Plugin system for custom extensions
-- [ ] Export to PDF, HTML, and EPUB
-- [ ] Command palette (⌘K)
-
-## Q3 2026
-
-- [ ] Mobile companion app
-- [ ] Collaborative real-time editing
-- [ ] Version history and document diffs
-- [ ] AI-powered writing assistant
-
----
-
-## Notes
-
-The core principle of Complexte is **clarity through constraint**. Every feature must serve the writing experience.
+- [ ] Drag-and-drop page reordering
+- [ ] Command palette
+- [ ] Backlinks
 `,
 
   'meeting-notes': `# Meeting Notes
 
 ## Design Review — April 11, 2026
 
-**Attendees:** Brian, Sarah, Marcus
-
-### Agenda
-
-1. Review new interface mockups
-2. Discuss typography choices
-3. Align on color system
-4. Next steps
-
 ### Discussion
 
-**Typography:** We agreed to use Geist for UI elements and Geist Mono for the editor. The pairing creates clear visual hierarchy between the shell and the writing surface.
-
-**Color system:** Dark-first approach inspired by OpenAI's aesthetic. Primary background at \`#0d0d0d\`, surfaces at \`#111\` and \`#171717\`. Accent color \`#19c37d\` for interactive states.
-
-**Layout:** Three-panel layout (sidebar | editor | preview) with the ability to collapse to single-pane when focused writing is needed.
-
-### Action Items
-
-- [ ] Brian: Finalize icon set (@2026-04-15)
-- [ ] Sarah: Write accessibility guidelines
-- [ ] Marcus: Prototype the command palette
-
----
-
-Next meeting: **April 18, 2026 at 10:00 AM**
+The navigation should feel closer to Obsidian and Notion: workspaces at the top, pages in a nested tree, and child pages attached directly to their parent.
 `,
 
   'design-philosophy': `# Design Philosophy
@@ -120,83 +71,131 @@ Next meeting: **April 18, 2026 at 10:00 AM**
 
 ### 1. Content First
 
-The interface should disappear when you write. Every pixel of chrome is a pixel stolen from your words. We obsess over negative space.
+The interface should disappear when you write. Every pixel of chrome is a pixel stolen from your words.
 
 ### 2. Progressive Disclosure
 
-Simple things should be simple. Complex things should be possible. The default view is a blank canvas; power features reveal themselves as needed.
-
-### 3. Honest Materials
-
-No skeuomorphic tricks. No unnecessary gradients. The aesthetic should feel **inevitable** — as if no other design was possible.
-
-### 4. Speed as a Feature
-
-Every interaction should feel instant. Loading states are a failure mode, not a UX pattern. Cache aggressively. Optimize relentlessly.
-
----
-
-## Aesthetic References
-
-- **OpenAI** — Restrained dark palette, confident typography
-- **Linear** — Keyboard-first, dense information design
-- **Obsidian** — Personal knowledge, graph of ideas
-- **iA Writer** — Focus mode, typographic purity
-
----
-
-*These are living principles. They will evolve as Complexte evolves.*
+Simple things should be simple. Complex things should be possible.
 `,
 
   'scratch': `# Scratch Pad
 
-Use this document for quick notes and temporary ideas.
+Use this page for quick notes and temporary ideas.
+`,
 
----
+  'research': `# Research
 
+Collect source notes, ideas, and open questions here.
+`,
+
+  'drafts': `# Drafts
+
+Loose drafts and outlines.
 `,
 }
 
-const INITIAL_DOCUMENTS: DocumentMeta[] = [
-  { id: 'getting-started', name: 'Getting Started', modified: new Date(2026, 3, 11, 9, 0).toISOString() },
-  { id: 'project-roadmap', name: 'Project Roadmap', modified: new Date(2026, 3, 10, 14, 30).toISOString() },
-  { id: 'meeting-notes', name: 'Meeting Notes', modified: new Date(2026, 3, 11, 10, 15).toISOString() },
-  { id: 'design-philosophy', name: 'Design Philosophy', modified: new Date(2026, 3, 8, 16, 0).toISOString() },
-  { id: 'scratch', name: 'Scratch Pad', modified: new Date(2026, 3, 11, 8, 45).toISOString() },
+const INITIAL_WORKSPACES: Workspace[] = [
+  { id: 'personal', name: 'Personal', modified: new Date(2026, 3, 11, 9, 0).toISOString() },
+  { id: 'client-work', name: 'Client Work', modified: new Date(2026, 3, 10, 14, 30).toISOString() },
+]
+
+const INITIAL_PAGES: PageMeta[] = [
+  { id: 'getting-started', workspaceId: 'personal', name: 'Getting Started', indexedPath: ['Inbox'], modified: new Date(2026, 3, 11, 9, 0).toISOString(), order: 0 },
+  { id: 'project-roadmap', workspaceId: 'personal', name: 'Project Roadmap', indexedPath: ['Projects', 'Roadmap'], modified: new Date(2026, 3, 10, 14, 30).toISOString(), order: 1 },
+  { id: 'meeting-notes', workspaceId: 'personal', name: 'Meeting Notes', indexedPath: ['Work', 'Meetings'], modified: new Date(2026, 3, 11, 10, 15).toISOString(), order: 2 },
+  { id: 'design-philosophy', workspaceId: 'personal', name: 'Design Philosophy', indexedPath: ['Projects', 'Design'], modified: new Date(2026, 3, 8, 16, 0).toISOString(), order: 3 },
+  { id: 'scratch', workspaceId: 'personal', name: 'Scratch Pad', indexedPath: ['Inbox'], modified: new Date(2026, 3, 11, 8, 45).toISOString(), order: 4 },
+  { id: 'research', workspaceId: 'client-work', name: 'Research', indexedPath: ['Research'], modified: new Date(2026, 3, 9, 11, 30).toISOString(), order: 0 },
+  { id: 'drafts', workspaceId: 'client-work', name: 'Drafts', indexedPath: ['Writing', 'Drafts'], modified: new Date(2026, 3, 9, 12, 15).toISOString(), order: 1 },
 ]
 
 let contentStore: Record<string, string> = { ...MOCK_CONTENT }
+let pageCounter = INITIAL_PAGES.length
+let workspaceCounter = INITIAL_WORKSPACES.length
 
-let docCounter = INITIAL_DOCUMENTS.length
+function slugify(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'untitled'
+}
 
-function generateId(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + (++docCounter)
+function generatePageId(name: string): string {
+  return `${slugify(name)}-${++pageCounter}`
+}
+
+function generateWorkspaceId(name: string): string {
+  return `${slugify(name)}-${++workspaceCounter}`
+}
+
+function inferIndexedPath(name: string, content: string, workspacePages: PageMeta[]): string[] {
+  const text = `${name}\n${content}`.toLowerCase()
+  const existingTopLevel = new Set(workspacePages.map(page => page.indexedPath[0]).filter(Boolean))
+
+  if (/\b(homework|assignment|problem set|calculus|integral|math|algebra|geometry|class|course)\b/.test(text)) {
+    if (/\b(calculus|integral|derivative|algebra|geometry|math)\b/.test(text)) {
+      return /\b(homework|assignment|problem set)\b/.test(text)
+        ? ['Classes', 'Math', 'Homework']
+        : ['Classes', 'Math', 'Notes']
+    }
+    return ['Classes', 'Notes']
+  }
+
+  if (/\b(meeting|agenda|attendees|action items?|standup|review)\b/.test(text)) {
+    return ['Work', 'Meetings']
+  }
+
+  if (/\b(roadmap|milestone|q[1-4]|project|upcoming|in progress)\b/.test(text)) {
+    return ['Projects', 'Roadmap']
+  }
+
+  if (/\b(design|interface|typography|layout|principles?|aesthetic)\b/.test(text)) {
+    return ['Projects', 'Design']
+  }
+
+  if (/\b(research|source|study|paper|question|hypothesis)\b/.test(text)) {
+    return ['Research']
+  }
+
+  if (/\b(draft|outline|essay|article|post)\b/.test(text)) {
+    return ['Writing', 'Drafts']
+  }
+
+  return existingTopLevel.has('Inbox') ? ['Inbox'] : ['Unsorted']
 }
 
 interface DocumentStore {
-  documents: DocumentMeta[]
+  workspaces: Workspace[]
+  activeWorkspaceId: string
+  pages: PageMeta[]
   activeId: string | null
   content: string
   isSidebarCollapsed: boolean
 
-  openDocument: (id: string) => void
+  openPage: (id: string) => void
   setContent: (content: string) => void
   saveDocument: () => void
-  createDocument: (name: string) => DocumentMeta
-  deleteDocument: (id: string) => void
-  renameDocument: (id: string, newName: string) => void
+  createWorkspace: (name: string) => Workspace
+  setActiveWorkspace: (id: string) => void
+  createPage: (name: string) => PageMeta
+  deletePage: (id: string) => void
+  renamePage: (id: string, newName: string) => void
   toggleSidebar: () => void
 }
 
 export const useDocumentStore = create<DocumentStore>((set, get) => ({
-  documents: INITIAL_DOCUMENTS,
+  workspaces: INITIAL_WORKSPACES,
+  activeWorkspaceId: INITIAL_WORKSPACES[0].id,
+  pages: INITIAL_PAGES,
   activeId: null,
   content: '',
   isSidebarCollapsed: false,
 
-  openDocument: (id: string) => {
-    const content = contentStore[id] ?? ''
-    set({ activeId: id, content })
+  openPage: (id: string) => {
+    const page = get().pages.find(item => item.id === id)
+    if (!page) return
+    set({
+      activeId: id,
+      activeWorkspaceId: page.workspaceId,
+      content: contentStore[id] ?? '',
+    })
   },
 
   setContent: (content: string) => {
@@ -208,42 +207,82 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   },
 
   saveDocument: () => {
-    const { activeId, content, documents } = get()
+    const { activeId, content, pages, workspaces } = get()
     if (!activeId) return
+
+    const page = pages.find(item => item.id === activeId)
+    if (!page) return
+
+    const modified = new Date().toISOString()
+    const workspacePages = pages.filter(item => item.workspaceId === page.workspaceId)
+    const indexedPath = inferIndexedPath(page.name, content, workspacePages)
     contentStore[activeId] = content
     set({
-      documents: documents.map(d =>
-        d.id === activeId ? { ...d, modified: new Date().toISOString() } : d,
+      pages: pages.map(item => item.id === activeId ? { ...item, indexedPath, modified } : item),
+      workspaces: workspaces.map(workspace =>
+        workspace.id === page.workspaceId ? { ...workspace, modified } : workspace,
       ),
     })
   },
 
-  createDocument: (name: string) => {
-    const id = generateId(name)
-    const doc: DocumentMeta = {
-      id,
+  createWorkspace: (name: string) => {
+    const workspace: Workspace = {
+      id: generateWorkspaceId(name),
       name,
       modified: new Date().toISOString(),
     }
+    set(state => ({
+      workspaces: [...state.workspaces, workspace],
+      activeWorkspaceId: workspace.id,
+      activeId: null,
+      content: '',
+    }))
+    return workspace
+  },
+
+  setActiveWorkspace: (id: string) => {
+    const workspace = get().workspaces.find(item => item.id === id)
+    if (!workspace) return
+    set({ activeWorkspaceId: id, activeId: null, content: '' })
+  },
+
+  createPage: (name: string) => {
+    const { activeWorkspaceId, pages } = get()
+    const siblingCount = pages.filter(item => item.workspaceId === activeWorkspaceId).length
+    const id = generatePageId(name)
+    const page: PageMeta = {
+      id,
+      workspaceId: activeWorkspaceId,
+      name,
+      indexedPath: ['Inbox'],
+      modified: new Date().toISOString(),
+      order: siblingCount,
+    }
     contentStore[id] = `# ${name}\n\n`
     set(state => ({
-      documents: [doc, ...state.documents],
+      pages: [...state.pages, page],
     }))
-    return doc
+    return page
   },
 
-  deleteDocument: (id: string) => {
+  deletePage: (id: string) => {
+    const { activeId } = get()
     delete contentStore[id]
     set(state => ({
-      documents: state.documents.filter(d => d.id !== id),
-      activeId: state.activeId === id ? null : state.activeId,
-      content: state.activeId === id ? '' : state.content,
+      pages: state.pages.filter(page => page.id !== id),
+      activeId: activeId === id ? null : activeId,
+      content: activeId === id ? '' : state.content,
     }))
   },
 
-  renameDocument: (id: string, newName: string) => {
+  renamePage: (id: string, newName: string) => {
+    const modified = new Date().toISOString()
+    const { pages } = get()
+    const page = pages.find(item => item.id === id)
+    const workspacePages = page ? pages.filter(item => item.workspaceId === page.workspaceId) : []
+    const indexedPath = page ? inferIndexedPath(newName, contentStore[id] ?? '', workspacePages) : ['Inbox']
     set(state => ({
-      documents: state.documents.map(d => d.id === id ? { ...d, name: newName } : d),
+      pages: state.pages.map(page => page.id === id ? { ...page, name: newName, indexedPath, modified } : page),
     }))
   },
 
