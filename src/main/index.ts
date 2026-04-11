@@ -84,6 +84,12 @@ const appIconPath = process.env['ELECTRON_RENDERER_URL']
   ? join(__dirname, '../../src/renderer/public/favicon.svg')
   : join(__dirname, '../renderer/favicon.svg')
 
+function applyAppIcon(): void {
+  if (process.platform === 'darwin') {
+    app.dock.setIcon(appIconPath)
+  }
+}
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1280,
@@ -118,6 +124,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  applyAppIcon()
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
