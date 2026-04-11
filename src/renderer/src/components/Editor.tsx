@@ -384,11 +384,13 @@ function EditorFloatingControls() {
 }
 
 export default function Editor() {
-  const { content, setContent, saveDocument } = useDocumentStore()
+  const { content, contentVersion, setContent, saveDocument } = useDocumentStore()
   const [, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>()
   const savedTimerRef = useRef<ReturnType<typeof setTimeout>>()
+  const isApplyingExternalContentRef = useRef(false)
+  const syncedContentVersionRef = useRef(contentVersion)
 
   const editor = usePlateEditor({
     plugins,
@@ -396,6 +398,8 @@ export default function Editor() {
   })
 
   const handleValueChange = useCallback(() => {
+    if (isApplyingExternalContentRef.current) return
+
     try {
       setContent(clonePlateDocument(editor.children as PlateDocumentValue))
 
@@ -412,6 +416,17 @@ export default function Editor() {
       // Ignore transient editor state while Plate is normalizing nodes.
     }
   }, [editor, setContent, saveDocument])
+
+  useEffect(() => {
+    if (syncedContentVersionRef.current === contentVersion) return
+
+    syncedContentVersionRef.current = contentVersion
+    isApplyingExternalContentRef.current = true
+    editor.tf.replaceNodes(clonePlateDocument(content) as never, { at: [], children: true })
+    window.setTimeout(() => {
+      isApplyingExternalContentRef.current = false
+    }, 0)
+  }, [content, contentVersion, editor])
 
   return (
     <div className="editor-root">

@@ -212,6 +212,7 @@ interface DocumentStore {
   activeId: string | null
   openTabIds: string[]
   content: PlateDocumentValue
+  contentVersion: number
   isSidebarCollapsed: boolean
   theme: Theme
   aiSettings: AiSettings
@@ -240,6 +241,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   activeId: null,
   openTabIds: [],
   content: emptyPlateDocument(),
+  contentVersion: 0,
   isSidebarCollapsed: false,
   theme: loadTheme(),
   aiSettings: loadAiSettings(),
@@ -252,6 +254,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       activeWorkspaceId: page.workspaceId,
       openTabIds: get().openTabIds.includes(id) ? get().openTabIds : [...get().openTabIds, id],
       content: clonePlateDocument(contentStore[id] ?? emptyPlateDocument()),
+      contentVersion: get().contentVersion + 1,
     })
   },
 
@@ -274,6 +277,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       content: isClosingActiveTab
         ? clonePlateDocument(nextActiveId ? contentStore[nextActiveId] ?? emptyPlateDocument() : emptyPlateDocument())
         : content,
+      contentVersion: isClosingActiveTab ? get().contentVersion + 1 : get().contentVersion,
     })
 
     return nextActiveId
@@ -289,7 +293,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   },
 
   setPageContent: (id: string, content: string, options = {}) => {
-    const { activeId, pages, workspaces } = get()
+    const { activeId, contentVersion, pages, workspaces } = get()
     const page = pages.find(item => item.id === id)
     if (!page) return
 
@@ -301,6 +305,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
     set({
       content: activeId === id ? clonePlateDocument(value) : get().content,
+      contentVersion: activeId === id ? contentVersion + 1 : contentVersion,
       pages: pages.map(item => item.id === id
         ? {
             ...item,
@@ -359,6 +364,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       activeWorkspaceId: workspace.id,
       activeId: null,
       content: emptyPlateDocument(),
+      contentVersion: state.contentVersion + 1,
     }))
     return workspace
   },
@@ -366,7 +372,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   setActiveWorkspace: (id: string) => {
     const workspace = get().workspaces.find(item => item.id === id)
     if (!workspace) return
-    set({ activeWorkspaceId: id, activeId: null, content: emptyPlateDocument() })
+    set(state => ({
+      activeWorkspaceId: id,
+      activeId: null,
+      content: emptyPlateDocument(),
+      contentVersion: state.contentVersion + 1,
+    }))
   },
 
   createPage: (name: string, indexedPath = ['Inbox']) => {
@@ -398,6 +409,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       openTabIds: state.openTabIds.filter(tabId => tabId !== id),
       activeId: activeId === id ? null : activeId,
       content: activeId === id ? emptyPlateDocument() : state.content,
+      contentVersion: activeId === id ? state.contentVersion + 1 : state.contentVersion,
     }))
   },
 

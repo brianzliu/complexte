@@ -8,6 +8,10 @@ export type GenerateDocumentResponse = {
   content: string
 }
 
+export type GenerateDocumentStreamCallbacks = {
+  onDelta?: (delta: string, content: string) => void | Promise<void>
+}
+
 type OpenRouterErrorMetadata = {
   provider_name?: string
   raw?: unknown
@@ -25,6 +29,18 @@ type OpenRouterChatResponse = {
     message?: string
     metadata?: OpenRouterErrorMetadata
   }
+}
+
+type OpenRouterStreamChunk = {
+  choices?: Array<{
+    delta?: {
+      content?: string | Array<{ type?: string; text?: string }>
+    }
+    message?: {
+      content?: string | Array<{ type?: string; text?: string }>
+    }
+  }>
+  error?: OpenRouterChatResponse['error']
 }
 
 type NormalizedGenerateDocumentRequest = {
@@ -66,16 +82,24 @@ function normalizeRequest(request: GenerateDocumentRequest): NormalizedGenerateD
   return { apiKey, model, prompt }
 }
 
-function readOpenRouterContent(payload: OpenRouterChatResponse): string {
-  const content = payload.choices?.[0]?.message?.content
-  if (typeof content === 'string') return content.trim()
+function readContentValue(content: string | Array<{ text?: string }> | undefined, trim = true): string {
+  if (typeof content === 'string') return trim ? content.trim() : content
   if (Array.isArray(content)) {
-    return content
+    const text = content
       .map(part => part.text ?? '')
       .join('\n')
-      .trim()
+    return trim ? text.trim() : text
   }
   return ''
+}
+
+function readOpenRouterContent(payload: OpenRouterChatResponse): string {
+  return readContentValue(payload.choices?.[0]?.message?.content)
+}
+
+function readOpenRouterDelta(payload: OpenRouterStreamChunk): string {
+  return readContentValue(payload.choices?.[0]?.delta?.content, false)
+    || readContentValue(payload.choices?.[0]?.message?.content, false)
 }
 
 function truncateDetail(value: string): string {
@@ -121,7 +145,11 @@ function describeOpenRouterError(status: number, payload: OpenRouterChatResponse
   return `OpenRouter request failed (HTTP ${status}): ${message}.${suffix}`
 }
 
-function buildRequestBody(request: NormalizedGenerateDocumentRequest, tokenMode: TokenMode): Record<string, unknown> {
+function buildRequestBody(
+  request: NormalizedGenerateDocumentRequest,
+  tokenMode: TokenMode,
+  stream = false,
+): Record<string, unknown> {
   return {
     model: request.model || undefined,
     messages: [
@@ -141,6 +169,7 @@ function buildRequestBody(request: NormalizedGenerateDocumentRequest, tokenMode:
       },
     ],
     temperature: 0.7,
+    stream,
     [tokenMode]: MAX_OUTPUT_TOKENS,
   }
 }
@@ -171,6 +200,126 @@ async function requestOpenRouterDocument(
   return { content }
 }
 
+function parseStreamErrorPayload(data: string): OpenRouterChatResponse | null {
+  try {
+    const payload = JSON.parse(data) as OpenRouterStreamChunk
+    return payload.error ? { error: payload.error } : null
+  } catch {
+    return null
+  }
+}
+
+async function parseOpenRouterStream(
+  response: Response,
+  callbacks: GenerateDocumentStreamCallbacks,
+): Promise<string> {
+  if (!response.body) throw new Error('OpenRouter did not return a readable stream.')
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let content = ''
+  let streamError: Error | null = null
+
+  const handleEvent = async (eventText: string) => {
+    const data = eventText
+      .split(/\r?\n/)
+      .filter(line => line.startsWith('data:'))
+      .map(line => line.slice(5).trimStart())
+      .join('\n')
+      .trim()
+
+    if (!data || data === '[DONE]') return
+
+    let payload: OpenRouterStreamChunk
+    try {
+      payload = JSON.parse(data) as OpenRouterStreamChunk
+    } catch {
+      return
+    }
+
+    if (payload.error) {
+      streamError = new OpenRouterRequestError(
+        describeOpenRouterError(response.status, { error: payload.error }),
+        response.status,
+        { error: payload.error },
+      )
+      return
+    }
+
+    const delta = readOpenRouterDelta(payload)
+    if (!delta) return
+
+    content += delta
+    await callbacks.onDelta?.(delta, content)
+  }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+
+    while (true) {
+      const boundary = buffer.search(/\r?\n\r?\n/)
+      if (boundary === -1) break
+
+      const eventText = buffer.slice(0, boundary)
+      buffer = buffer.slice(buffer[boundary] === '\r' ? boundary + 4 : boundary + 2)
+      await handleEvent(eventText)
+      if (streamError) throw streamError
+    }
+  }
+
+  buffer += decoder.decode()
+  if (buffer.trim()) await handleEvent(buffer)
+  if (streamError) throw streamError
+
+  return content.trim()
+}
+
+async function requestOpenRouterDocumentStream(
+  request: NormalizedGenerateDocumentRequest,
+  tokenMode: TokenMode,
+  callbacks: GenerateDocumentStreamCallbacks,
+): Promise<GenerateDocumentResponse> {
+  const response = await fetch(OPENROUTER_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${request.apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://complexte.local',
+      'X-OpenRouter-Title': 'Complexte',
+    },
+    body: JSON.stringify(buildRequestBody(request, tokenMode, true)),
+  })
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '')
+    let payload: OpenRouterChatResponse = {}
+
+    if (text) {
+      const streamPayload = parseStreamErrorPayload(text)
+      if (streamPayload) {
+        payload = streamPayload
+      } else {
+        try {
+          payload = JSON.parse(text) as OpenRouterChatResponse
+        } catch {
+          payload = {}
+        }
+      }
+    }
+
+    throw new OpenRouterRequestError(describeOpenRouterError(response.status, payload), response.status, payload)
+  }
+
+  const content = await parseOpenRouterStream(response, callbacks)
+  if (!content) throw new Error('OpenRouter returned an empty document.')
+
+  return { content }
+}
+
 export async function generateOpenRouterDocument(request: GenerateDocumentRequest): Promise<GenerateDocumentResponse> {
   const normalizedRequest = normalizeRequest(request)
 
@@ -183,6 +332,41 @@ export async function generateOpenRouterDocument(request: GenerateDocumentReques
 
     try {
       return await requestOpenRouterDocument(normalizedRequest, 'max_tokens')
+    } catch (retryError) {
+      if (retryError instanceof Error) {
+        retryError.message = `${retryError.message} Retried with OpenRouter compatibility token parameter.`
+      }
+      throw retryError
+    }
+  }
+}
+
+export async function generateOpenRouterDocumentStream(
+  request: GenerateDocumentRequest,
+  callbacks: GenerateDocumentStreamCallbacks = {},
+): Promise<GenerateDocumentResponse> {
+  const normalizedRequest = normalizeRequest(request)
+  let receivedContent = false
+  const trackingCallbacks: GenerateDocumentStreamCallbacks = {
+    onDelta: async (delta, content) => {
+      receivedContent = true
+      await callbacks.onDelta?.(delta, content)
+    },
+  }
+
+  try {
+    return await requestOpenRouterDocumentStream(normalizedRequest, 'max_completion_tokens', trackingCallbacks)
+  } catch (error) {
+    if (
+      receivedContent ||
+      !(error instanceof OpenRouterRequestError) ||
+      !error.shouldRetryWithCompatibilityRequest()
+    ) {
+      throw error
+    }
+
+    try {
+      return await requestOpenRouterDocumentStream(normalizedRequest, 'max_tokens', trackingCallbacks)
     } catch (retryError) {
       if (retryError instanceof Error) {
         retryError.message = `${retryError.message} Retried with OpenRouter compatibility token parameter.`

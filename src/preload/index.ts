@@ -1,8 +1,10 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import {
   generateOpenRouterDocument,
+  generateOpenRouterDocumentStream,
   type GenerateDocumentRequest,
   type GenerateDocumentResponse,
+  type GenerateDocumentStreamCallbacks,
 } from '../shared/openRouterDocument'
 
 function isMissingOpenRouterHandler(error: unknown): boolean {
@@ -22,6 +24,8 @@ contextBridge.exposeInMainWorld('platform', process.platform)
 
 contextBridge.exposeInMainWorld('openRouter', {
   generateDocument,
+  streamDocument: (request: GenerateDocumentRequest, callbacks?: GenerateDocumentStreamCallbacks) =>
+    generateOpenRouterDocumentStream(request, callbacks),
 })
 
 contextBridge.exposeInMainWorld('appShortcuts', {

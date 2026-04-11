@@ -1,5 +1,5 @@
 import { FormEvent, useMemo, useState } from 'react'
-import { generateDocument } from '../lib/openRouter'
+import { streamDocument } from '../lib/openRouter'
 import { useDocumentStore } from '../store/useDocumentStore'
 
 function deriveTitle(markdown: string, fallback: string): string {
@@ -44,18 +44,53 @@ export default function DocumentStarter({ pageId }: { pageId: string }) {
     setError(null)
     setIsGenerating(true)
 
-    try {
-      const content = await generateDocument({
-        apiKey: aiSettings.openRouterApiKey,
-        model: aiSettings.openRouterModel,
-        prompt,
-      })
+    const writeContent = (content: string) => {
       setPageContent(pageId, content, {
         initialize: true,
         name: deriveTitle(content, prompt),
       })
+    }
+
+    let streamedContent = ''
+    let flushTimer: ReturnType<typeof setTimeout> | null = null
+
+    const flushContent = () => {
+      if (flushTimer) {
+        clearTimeout(flushTimer)
+        flushTimer = null
+      }
+      writeContent(streamedContent)
+    }
+
+    const scheduleFlush = () => {
+      if (flushTimer) return
+      flushTimer = setTimeout(flushContent, 120)
+    }
+
+    writeContent('')
+
+    try {
+      streamedContent = await streamDocument(
+        {
+          apiKey: aiSettings.openRouterApiKey,
+          model: aiSettings.openRouterModel,
+          prompt,
+        },
+        {
+          onDelta: (_delta, content) => {
+            streamedContent = content
+            scheduleFlush()
+          },
+        },
+      )
+      flushContent()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not generate the document.')
+      const message = err instanceof Error ? err.message : 'Could not generate the document.'
+      streamedContent = [
+        streamedContent.trim(),
+        `> Generation stopped: ${message}`,
+      ].filter(Boolean).join('\n\n')
+      flushContent()
     } finally {
       setIsGenerating(false)
     }
