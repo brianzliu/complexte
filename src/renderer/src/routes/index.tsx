@@ -26,10 +26,6 @@ export default function IndexPage() {
   return (
     <div className="welcome-page">
       <div className="welcome-inner">
-        <div className="welcome-logo">
-          <img src="/favicon.svg" alt="Complexte" draggable={false} />
-        </div>
-
         <h1 className="welcome-greeting">{greeting()}</h1>
         <p className="welcome-sub">{activeWorkspace?.name ?? 'Workspace'}</p>
 
