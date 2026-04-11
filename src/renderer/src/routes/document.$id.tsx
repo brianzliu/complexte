@@ -28,7 +28,7 @@ export default function DocumentPage() {
         </button>
         <h1 className="document-title">{page?.name ?? 'Untitled'}</h1>
       </div>
-      {activeId === id && <Editor />}
+      {activeId === id && <Editor key={id} />}
     </div>
   )
 }

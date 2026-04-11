@@ -3,6 +3,7 @@ import { createHashHistory } from '@tanstack/history'
 import Root from './routes/__root'
 import IndexPage from './routes/index'
 import DocumentPage from './routes/document.$id'
+import SettingsPage from './routes/settings'
 
 const hashHistory = createHashHistory()
 
@@ -20,7 +21,13 @@ const documentRoute = createRoute({
   component: DocumentPage,
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, documentRoute])
+const settingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings',
+  component: SettingsPage,
+})
+
+const routeTree = rootRoute.addChildren([indexRoute, documentRoute, settingsRoute])
 
 export const router = createRouter({
   routeTree,

@@ -5,8 +5,28 @@ import { useDocumentStore } from '../store/useDocumentStore'
 import Sidebar from '../components/Sidebar'
 
 export default function Root() {
-  const { isSidebarCollapsed, toggleSidebar, createPage } = useDocumentStore()
+  const { isSidebarCollapsed, toggleSidebar, createPage, theme } = useDocumentStore()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    const applyTheme = (t: typeof theme) => {
+      if (t === 'auto') {
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+        document.documentElement.dataset.theme = prefersDark ? 'dark' : 'light'
+      } else {
+        document.documentElement.dataset.theme = t
+      }
+    }
+
+    applyTheme(theme)
+
+    if (theme === 'auto') {
+      const mq = window.matchMedia('(prefers-color-scheme: dark)')
+      const handler = () => applyTheme('auto')
+      mq.addEventListener('change', handler)
+      return () => mq.removeEventListener('change', handler)
+    }
+  }, [theme])
 
   const handleNewPage = useCallback(() => {
     const page = createPage('Untitled')

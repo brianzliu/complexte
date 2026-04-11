@@ -1,5 +1,15 @@
 import { create } from 'zustand'
 
+export type Theme = 'dark' | 'light' | 'auto'
+
+function loadTheme(): Theme {
+  try {
+    const v = localStorage.getItem('complexte-theme')
+    if (v === 'dark' || v === 'light' || v === 'auto') return v as Theme
+  } catch {}
+  return 'dark'
+}
+
 export interface Workspace {
   id: string
   name: string
@@ -168,6 +178,7 @@ interface DocumentStore {
   activeId: string | null
   content: string
   isSidebarCollapsed: boolean
+  theme: Theme
 
   openPage: (id: string) => void
   setContent: (content: string) => void
@@ -178,6 +189,8 @@ interface DocumentStore {
   deletePage: (id: string) => void
   renamePage: (id: string, newName: string) => void
   toggleSidebar: () => void
+  setTheme: (theme: Theme) => void
+  getPageContent: (id: string) => string
 }
 
 export const useDocumentStore = create<DocumentStore>((set, get) => ({
@@ -187,6 +200,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   activeId: null,
   content: '',
   isSidebarCollapsed: false,
+  theme: loadTheme(),
 
   openPage: (id: string) => {
     const page = get().pages.find(item => item.id === id)
@@ -289,4 +303,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   toggleSidebar: () => {
     set(state => ({ isSidebarCollapsed: !state.isSidebarCollapsed }))
   },
+
+  setTheme: (theme: Theme) => {
+    try { localStorage.setItem('complexte-theme', theme) } catch {}
+    set({ theme })
+  },
+
+  getPageContent: (id: string) => contentStore[id] ?? '',
 }))
