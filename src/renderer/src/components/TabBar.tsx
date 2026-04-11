@@ -1,5 +1,6 @@
 import { useLocation, useNavigate } from '@tanstack/react-router'
 import { useDocumentStore } from '../store/useDocumentStore'
+import type { PageMeta } from '../store/useDocumentStore'
 
 interface TabBarProps {
   onNewPage: () => void
@@ -8,6 +9,10 @@ interface TabBarProps {
 function getDocumentIdFromPath(pathname: string): string | null {
   const match = pathname.match(/^\/document\/([^/]+)/)
   return match ? decodeURIComponent(match[1]) : null
+}
+
+function isPage(page: PageMeta | undefined): page is PageMeta {
+  return Boolean(page)
 }
 
 export default function TabBar({ onNewPage }: TabBarProps) {
@@ -19,7 +24,7 @@ export default function TabBar({ onNewPage }: TabBarProps) {
   const activeTabId = routeDocumentId ?? activeId
   const openTabs = openTabIds
     .map(id => pages.find(page => page.id === id))
-    .filter(Boolean)
+    .filter(isPage)
 
   const handleCloseTab = (id: string) => {
     const isActiveTab = activeTabId === id
