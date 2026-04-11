@@ -184,6 +184,11 @@ function EditorFloatingControls() {
     setSlashMenu(null)
   }, [])
 
+  const closeMenus = useCallback(() => {
+    setSelectionMenu(null)
+    setSlashMenu(null)
+  }, [])
+
   useEffect(() => {
     document.addEventListener('selectionchange', updateSelectionMenu)
     window.addEventListener('resize', updateSelectionMenu)
@@ -194,6 +199,22 @@ function EditorFloatingControls() {
       window.removeEventListener('scroll', updateSelectionMenu, true)
     }
   }, [updateSelectionMenu])
+
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!selectionMenu && !slashMenu) return
+
+      const target = event.target
+      if (!(target instanceof Element)) return
+      if (target.closest('.plate-editor, .bubble-menu, .slash-menu')) return
+
+      closeMenus()
+      window.getSelection()?.removeAllRanges()
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown, true)
+    return () => document.removeEventListener('pointerdown', handlePointerDown, true)
+  }, [closeMenus, selectionMenu, slashMenu])
 
   const openSlashMenu = () => {
     window.setTimeout(() => {
@@ -216,11 +237,6 @@ function EditorFloatingControls() {
         setSlashMenu(null)
       }
     }, 0)
-  }
-
-  const closeMenus = () => {
-    setSelectionMenu(null)
-    setSlashMenu(null)
   }
 
   const applyTextColor = (color: string) => {
