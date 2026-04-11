@@ -923,7 +923,7 @@ input, textarea {
 .breadcrumb-segment.current {
   max-width: none;
   margin: 0;
-  font-size: 13.5px;
+  font-size: 13px;
   color: var(--text-1);
 }
 

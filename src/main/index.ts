@@ -48,6 +48,13 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
+  win.webContents.on('before-input-event', (event, input) => {
+    if ((input.meta || input.control) && input.key.toLowerCase() === 'w') {
+      event.preventDefault()
+      win.webContents.send('tabs:close-active')
+    }
+  })
+
   if (process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {

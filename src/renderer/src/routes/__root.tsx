@@ -6,7 +6,7 @@ import Sidebar from '../components/Sidebar'
 import TabBar from '../components/TabBar'
 
 export default function Root() {
-  const { activeId, activeWorkspaceId, isSidebarCollapsed, toggleSidebar, createPage, pages, theme } = useDocumentStore()
+  const { activeId, activeWorkspaceId, closeTab, isSidebarCollapsed, toggleSidebar, createPage, pages, theme } = useDocumentStore()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -43,11 +43,36 @@ export default function Root() {
     navigate({ to: '/document/$id', params: { id: page.id } })
   }, [activeId, activeWorkspaceId, createPage, navigate, pages])
 
+  const handleCloseActiveTab = useCallback(() => {
+    if (!activeId) return
+
+    const nextId = closeTab(activeId)
+    if (nextId) {
+      navigate({ to: '/document/$id', params: { id: nextId } })
+    } else {
+      navigate({ to: '/' })
+    }
+  }, [activeId, closeTab, navigate])
+
+  useEffect(() => {
+    const appShortcuts = (window as Window & {
+      appShortcuts?: {
+        onCloseActiveTab: (callback: () => void) => () => void
+      }
+    }).appShortcuts
+
+    return appShortcuts?.onCloseActiveTab(handleCloseActiveTab)
+  }, [handleCloseActiveTab])
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
         e.preventDefault()
         handleNewPage()
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'w') {
+        e.preventDefault()
+        handleCloseActiveTab()
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 't') {
         e.preventDefault()
@@ -60,7 +85,7 @@ export default function Root() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [handleNewPage, handleNewPageInCurrentFolder, toggleSidebar])
+  }, [handleCloseActiveTab, handleNewPage, handleNewPageInCurrentFolder, toggleSidebar])
 
   return (
     <div className={`app-layout ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>

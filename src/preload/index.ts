@@ -23,3 +23,11 @@ contextBridge.exposeInMainWorld('platform', process.platform)
 contextBridge.exposeInMainWorld('openRouter', {
   generateDocument,
 })
+
+contextBridge.exposeInMainWorld('appShortcuts', {
+  onCloseActiveTab: (callback: () => void) => {
+    const listener = () => callback()
+    ipcRenderer.on('tabs:close-active', listener)
+    return () => ipcRenderer.removeListener('tabs:close-active', listener)
+  },
+})
