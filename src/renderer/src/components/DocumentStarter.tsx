@@ -69,20 +69,22 @@ export default function DocumentStarter({ pageId }: { pageId: string }) {
         </div>
 
         <form className="prompt-composer" onSubmit={handleGenerate}>
-          <textarea
-            className="prompt-composer-input"
-            value={prompt}
-            onChange={event => setPrompt(event.target.value)}
-            onKeyDown={event => {
-              if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault()
-                event.currentTarget.form?.requestSubmit()
-              }
-            }}
-            placeholder="What are you thinking of?"
-            rows={3}
-            disabled={isGenerating}
-          />
+          <div className="prompt-composer-box">
+            <textarea
+              className="prompt-composer-input"
+              value={prompt}
+              onChange={event => setPrompt(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault()
+                  event.currentTarget.form?.requestSubmit()
+                }
+              }}
+              placeholder="What are you thinking of?"
+              rows={3}
+              disabled={isGenerating}
+            />
+          </div>
           <div className="prompt-composer-footer">
             <button
               type="button"
