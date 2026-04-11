@@ -3,11 +3,13 @@ import type { CSSProperties, MouseEvent, ReactNode } from 'react'
 import { Plate, PlateContent, createPlatePlugin, useEditorRef, usePlateEditor } from 'platejs/react'
 import { BasicMarksPlugin } from '@platejs/basic-nodes/react'
 import { BasicBlocksPlugin, HighlightPlugin } from '@platejs/basic-nodes/react'
+import { AutoformatPlugin, autoformatArrow, autoformatMath, autoformatPunctuation } from '@platejs/autoformat'
 import { CodeBlockPlugin } from '@platejs/code-block/react'
 import { ListPlugin } from '@platejs/list/react'
 import { toggleList } from '@platejs/list'
 import { MarkdownPlugin } from '@platejs/markdown'
 import remarkGfm from 'remark-gfm'
+import { clonePlateDocument, type PlateDocumentValue } from '../lib/plateDocument'
 import { useDocumentStore } from '../store/useDocumentStore'
 
 type MenuPosition = {
@@ -60,6 +62,33 @@ const plugins = [
   HighlightColorPlugin,
   CodeBlockPlugin,
   ListPlugin,
+  AutoformatPlugin.configure({
+    options: {
+      rules: [
+        { mode: 'block', type: 'h1', match: '# ' },
+        { mode: 'block', type: 'h2', match: '## ' },
+        { mode: 'block', type: 'h3', match: '### ' },
+        { mode: 'block', type: 'blockquote', match: '> ' },
+        {
+          mode: 'block',
+          match: '- ',
+          format: editor => toggleList(editor, { listStyleType: 'disc' }),
+        },
+        {
+          mode: 'block',
+          match: '1\\. ',
+          matchByRegex: true,
+          format: editor => toggleList(editor, { listStyleType: 'decimal' }),
+        },
+        { mode: 'mark', type: 'bold', match: '**' },
+        { mode: 'mark', type: 'italic', match: '*' },
+        { mode: 'mark', type: 'code', match: '`' },
+        ...autoformatArrow,
+        ...autoformatPunctuation,
+        ...autoformatMath,
+      ],
+    },
+  }),
   MarkdownPlugin.configure({
     options: { remarkPlugins: [remarkGfm] },
   }),
@@ -89,24 +118,6 @@ function isSelectionInsideEditor(): boolean {
   const node = selection.anchorNode
   const element = node instanceof Element ? node : node?.parentElement
   return !!element?.closest('.plate-editor')
-}
-
-function isLeadingHyphenShortcut(): boolean {
-  const selection = window.getSelection()
-  if (!selection || !selection.isCollapsed || !isSelectionInsideEditor()) return false
-
-  const anchorNode = selection.anchorNode
-  if (!anchorNode || anchorNode.nodeType !== Node.TEXT_NODE) return false
-  if (selection.anchorOffset !== 1 || anchorNode.textContent?.[0] !== '-') return false
-
-  const parentElement = anchorNode.parentElement
-  const blockElement = parentElement?.closest('[data-slate-node="element"]')
-  if (!blockElement) return true
-
-  const range = document.createRange()
-  range.setStart(blockElement, 0)
-  range.setEnd(anchorNode, selection.anchorOffset)
-  return range.toString() === '-'
 }
 
 function hasActiveSlashTrigger(): boolean {
@@ -326,13 +337,6 @@ function EditorFloatingControls() {
         spellCheck={false}
         placeholder="Start writing…"
         onKeyDown={e => {
-          if (e.key === ' ' && isLeadingHyphenShortcut()) {
-            e.preventDefault()
-            closeMenus()
-            editor.tf.deleteBackward('character')
-            toggleList(editor, { listStyleType: 'disc' })
-            return
-          }
           if (e.key === '/') openSlashMenu()
           if (e.key === 'Escape') closeMenus()
         }}
@@ -351,22 +355,12 @@ export default function Editor() {
 
   const editor = usePlateEditor({
     plugins,
-    value: (e) => {
-      if (content) {
-        try {
-          return e.api.markdown.deserialize(content)
-        } catch {
-          // fall through to default
-        }
-      }
-      return [{ type: 'p', children: [{ text: '' }] }]
-    },
+    value: () => clonePlateDocument(content),
   })
 
   const handleValueChange = useCallback(() => {
     try {
-      const markdown = editor.api.markdown.serialize()
-      setContent(markdown)
+      setContent(clonePlateDocument(editor.children as PlateDocumentValue))
 
       clearTimeout(saveTimerRef.current)
       clearTimeout(savedTimerRef.current)
@@ -378,7 +372,7 @@ export default function Editor() {
         savedTimerRef.current = setTimeout(() => setSaveState('idle'), 1800)
       }, 1200)
     } catch {
-      // ignore serialization errors
+      // Ignore transient editor state while Plate is normalizing nodes.
     }
   }, [editor, setContent, saveDocument])
 

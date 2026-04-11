@@ -1,4 +1,12 @@
 import { create } from 'zustand'
+import {
+  clonePlateDocument,
+  emptyPlateDocument,
+  markdownToPlateDocument,
+  plateDocumentToMarkdown,
+  plateDocumentToPlainText,
+  type PlateDocumentValue,
+} from '../lib/plateDocument'
 
 export type Theme = 'dark' | 'light' | 'auto'
 
@@ -143,7 +151,9 @@ const INITIAL_PAGES: PageMeta[] = [
   { id: 'drafts', workspaceId: 'client-work', name: 'Drafts', indexedPath: ['Writing', 'Drafts'], modified: new Date(2026, 3, 9, 12, 15).toISOString(), order: 1, isInitialized: true },
 ]
 
-let contentStore: Record<string, string> = { ...MOCK_CONTENT }
+let contentStore: Record<string, PlateDocumentValue> = Object.fromEntries(
+  Object.entries(MOCK_CONTENT).map(([id, markdown]) => [id, markdownToPlateDocument(markdown)]),
+)
 let pageCounter = INITIAL_PAGES.length
 let workspaceCounter = INITIAL_WORKSPACES.length
 
@@ -201,14 +211,14 @@ interface DocumentStore {
   pages: PageMeta[]
   activeId: string | null
   openTabIds: string[]
-  content: string
+  content: PlateDocumentValue
   isSidebarCollapsed: boolean
   theme: Theme
   aiSettings: AiSettings
 
   openPage: (id: string) => void
   closeTab: (id: string) => string | null
-  setContent: (content: string) => void
+  setContent: (content: PlateDocumentValue) => void
   setPageContent: (id: string, content: string, options?: { initialize?: boolean; name?: string }) => void
   initializePage: (id: string) => void
   saveDocument: () => void
@@ -229,7 +239,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   pages: INITIAL_PAGES,
   activeId: null,
   openTabIds: [],
-  content: '',
+  content: emptyPlateDocument(),
   isSidebarCollapsed: false,
   theme: loadTheme(),
   aiSettings: loadAiSettings(),
@@ -241,7 +251,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       activeId: id,
       activeWorkspaceId: page.workspaceId,
       openTabIds: get().openTabIds.includes(id) ? get().openTabIds : [...get().openTabIds, id],
-      content: contentStore[id] ?? '',
+      content: clonePlateDocument(contentStore[id] ?? emptyPlateDocument()),
     })
   },
 
@@ -261,17 +271,20 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       activeId: nextActiveId,
       activeWorkspaceId: isClosingActiveTab && nextPage ? nextPage.workspaceId : activeWorkspaceId,
       openTabIds: nextOpenTabIds,
-      content: isClosingActiveTab ? (nextActiveId ? contentStore[nextActiveId] ?? '' : '') : content,
+      content: isClosingActiveTab
+        ? clonePlateDocument(nextActiveId ? contentStore[nextActiveId] ?? emptyPlateDocument() : emptyPlateDocument())
+        : content,
     })
 
     return nextActiveId
   },
 
-  setContent: (content: string) => {
-    set({ content })
+  setContent: (content: PlateDocumentValue) => {
+    const value = clonePlateDocument(content)
+    set({ content: value })
     const { activeId } = get()
     if (activeId) {
-      contentStore[activeId] = content
+      contentStore[activeId] = clonePlateDocument(value)
     }
   },
 
@@ -283,10 +296,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const modified = new Date().toISOString()
     const workspacePages = pages.filter(item => item.workspaceId === page.workspaceId)
     const indexedPath = inferIndexedPath(options.name ?? page.name, content, workspacePages)
-    contentStore[id] = content
+    const value = markdownToPlateDocument(content)
+    contentStore[id] = value
 
     set({
-      content: activeId === id ? content : get().content,
+      content: activeId === id ? clonePlateDocument(value) : get().content,
       pages: pages.map(item => item.id === id
         ? {
             ...item,
@@ -323,8 +337,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
     const modified = new Date().toISOString()
     const workspacePages = pages.filter(item => item.workspaceId === page.workspaceId)
-    const indexedPath = inferIndexedPath(page.name, content, workspacePages)
-    contentStore[activeId] = content
+    const plainText = plateDocumentToPlainText(content)
+    const indexedPath = inferIndexedPath(page.name, plainText, workspacePages)
+    contentStore[activeId] = clonePlateDocument(content)
     set({
       pages: pages.map(item => item.id === activeId ? { ...item, indexedPath, modified, isInitialized: true } : item),
       workspaces: workspaces.map(workspace =>
@@ -343,7 +358,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       workspaces: [...state.workspaces, workspace],
       activeWorkspaceId: workspace.id,
       activeId: null,
-      content: '',
+      content: emptyPlateDocument(),
     }))
     return workspace
   },
@@ -351,7 +366,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   setActiveWorkspace: (id: string) => {
     const workspace = get().workspaces.find(item => item.id === id)
     if (!workspace) return
-    set({ activeWorkspaceId: id, activeId: null, content: '' })
+    set({ activeWorkspaceId: id, activeId: null, content: emptyPlateDocument() })
   },
 
   createPage: (name: string, indexedPath = ['Inbox']) => {
@@ -367,7 +382,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       order: siblingCount,
       isInitialized: false,
     }
-    contentStore[id] = ''
+    contentStore[id] = emptyPlateDocument()
     set(state => ({
       pages: [...state.pages, page],
       openTabIds: [...state.openTabIds, id],
@@ -382,7 +397,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       pages: state.pages.filter(page => page.id !== id),
       openTabIds: state.openTabIds.filter(tabId => tabId !== id),
       activeId: activeId === id ? null : activeId,
-      content: activeId === id ? '' : state.content,
+      content: activeId === id ? emptyPlateDocument() : state.content,
     }))
   },
 
@@ -391,7 +406,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const { pages } = get()
     const page = pages.find(item => item.id === id)
     const workspacePages = page ? pages.filter(item => item.workspaceId === page.workspaceId) : []
-    const indexedPath = page ? inferIndexedPath(newName, contentStore[id] ?? '', workspacePages) : ['Inbox']
+    const indexedPath = page
+      ? inferIndexedPath(newName, plateDocumentToPlainText(contentStore[id] ?? emptyPlateDocument()), workspacePages)
+      : ['Inbox']
     set(state => ({
       pages: state.pages.map(page => page.id === id ? { ...page, name: newName, indexedPath, modified } : page),
     }))
@@ -412,5 +429,5 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set({ aiSettings: nextSettings })
   },
 
-  getPageContent: (id: string) => contentStore[id] ?? '',
+  getPageContent: (id: string) => plateDocumentToMarkdown(contentStore[id] ?? emptyPlateDocument()),
 }))
