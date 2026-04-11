@@ -1,12 +1,17 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'path'
 
+const appIconPath = process.env['ELECTRON_RENDERER_URL']
+  ? join(__dirname, '../../src/renderer/public/favicon.svg')
+  : join(__dirname, '../renderer/favicon.svg')
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
     minWidth: 860,
     minHeight: 560,
+    icon: appIconPath,
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 18 },
     backgroundColor: '#0d0d0d',

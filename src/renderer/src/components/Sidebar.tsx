@@ -104,12 +104,7 @@ export default function Sidebar({ onNewDocument }: SidebarProps) {
       {/* ── Header ── */}
       <div className="sidebar-header">
         <div className="app-brand">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-            <rect x="2" y="2" width="9" height="9" rx="2" fill="currentColor" opacity="0.9" />
-            <rect x="13" y="2" width="9" height="9" rx="2" fill="currentColor" opacity="0.5" />
-            <rect x="2" y="13" width="9" height="9" rx="2" fill="currentColor" opacity="0.5" />
-            <rect x="13" y="13" width="9" height="9" rx="2" fill="currentColor" opacity="0.25" />
-          </svg>
+          <img className="app-brand-logo" src="/favicon.svg" alt="" draggable={false} />
           <span className="app-brand-name">Complexte</span>
         </div>
 

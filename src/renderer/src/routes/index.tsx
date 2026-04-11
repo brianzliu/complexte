@@ -25,12 +25,7 @@ export default function IndexPage() {
     <div className="welcome-page">
       <div className="welcome-inner">
         <div className="welcome-logo">
-          <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
-            <rect x="2" y="2" width="9" height="9" rx="2" fill="currentColor" opacity="0.9" />
-            <rect x="13" y="2" width="9" height="9" rx="2" fill="currentColor" opacity="0.5" />
-            <rect x="2" y="13" width="9" height="9" rx="2" fill="currentColor" opacity="0.5" />
-            <rect x="13" y="13" width="9" height="9" rx="2" fill="currentColor" opacity="0.25" />
-          </svg>
+          <img src="/favicon.svg" alt="Complexte" draggable={false} />
         </div>
 
         <h1 className="welcome-greeting">{greeting()}</h1>
