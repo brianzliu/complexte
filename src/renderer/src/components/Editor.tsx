@@ -162,6 +162,7 @@ function EditorFloatingControls() {
   const editor = useEditorRef()
   const [selectionMenu, setSelectionMenu] = useState<MenuPosition | null>(null)
   const [slashMenu, setSlashMenu] = useState<MenuPosition | null>(null)
+  const isPointerSelectingRef = useRef(false)
 
   const preventDefault = (fn: () => void) => (e: MouseEvent<HTMLButtonElement>) => {
     e.preventDefault()
@@ -169,6 +170,8 @@ function EditorFloatingControls() {
   }
 
   const updateSelectionMenu = useCallback(() => {
+    if (isPointerSelectingRef.current) return
+
     const selection = window.getSelection()
     if (
       !selection ||
@@ -202,19 +205,37 @@ function EditorFloatingControls() {
 
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
-      if (!selectionMenu && !slashMenu) return
-
       const target = event.target
-      if (!(target instanceof Element)) return
-      if (target.closest('.plate-editor, .bubble-menu, .slash-menu')) return
+      const targetElement = target instanceof Element
+        ? target
+        : target instanceof Node
+          ? target.parentElement
+          : null
+      if (!targetElement) return
+      if (targetElement.closest('.bubble-menu, .slash-menu')) return
 
+      isPointerSelectingRef.current = !!targetElement.closest('.plate-editor')
       closeMenus()
-      window.getSelection()?.removeAllRanges()
+
+      if (!isPointerSelectingRef.current) {
+        window.getSelection()?.removeAllRanges()
+      }
+    }
+
+    const handlePointerUp = () => {
+      if (!isPointerSelectingRef.current) return
+
+      isPointerSelectingRef.current = false
+      window.setTimeout(updateSelectionMenu, 0)
     }
 
     document.addEventListener('pointerdown', handlePointerDown, true)
-    return () => document.removeEventListener('pointerdown', handlePointerDown, true)
-  }, [closeMenus, selectionMenu, slashMenu])
+    document.addEventListener('pointerup', handlePointerUp, true)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown, true)
+      document.removeEventListener('pointerup', handlePointerUp, true)
+    }
+  }, [closeMenus, updateSelectionMenu])
 
   const openSlashMenu = () => {
     window.setTimeout(() => {
