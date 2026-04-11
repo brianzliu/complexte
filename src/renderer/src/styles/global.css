@@ -812,6 +812,10 @@ input, textarea {
   color: var(--text-1);
 }
 
+.app-tabbar-sidebar-toggle {
+  margin-bottom: 2px;
+}
+
 /* ─────────────────────────────────────────
    Document Page
 ───────────────────────────────────────── */
@@ -836,24 +840,21 @@ input, textarea {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 0 40px;
+  padding: 0 28px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   -webkit-app-region: drag;
 }
 
 .app-layout.sidebar-collapsed .document-topbar {
-  padding-left: 40px;
+  padding-left: 28px;
 }
 
 [data-platform='darwin'] .app-layout:not(.sidebar-collapsed) .document-topbar {
-  padding-left: 40px;
+  padding-left: 28px;
 }
 
 .sidebar-toggle-btn {
-  position: absolute;
-  left: 20px;
-  top: 12px;
   width: 28px;
   height: 28px;
   display: flex;
@@ -867,16 +868,11 @@ input, textarea {
 }
 .sidebar-toggle-btn:hover { background: var(--bg-hover); color: var(--text-2); }
 
-.app-layout.sidebar-collapsed .sidebar-toggle-btn {
-  left: 20px;
-}
-
 .document-breadcrumb {
   display: flex;
   align-items: center;
   width: 100%;
-  max-width: 720px;
-  margin: 0 auto;
+  margin: 0;
   min-width: 0;
   overflow: hidden;
   color: var(--text-3);

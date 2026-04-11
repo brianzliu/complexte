@@ -76,6 +76,7 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
     pages,
     renamePage,
     setActiveWorkspace,
+    toggleSidebar,
     workspaces,
   } = useDocumentStore()
 
@@ -393,6 +394,17 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="sidebar-header compact">
+        <button
+          className="sidebar-toggle-btn"
+          onClick={toggleSidebar}
+          title="Hide sidebar"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+            <line x1="9" y1="3" x2="9" y2="21" />
+          </svg>
+        </button>
+
         <button className="sidebar-home-btn" onClick={() => navigate({ to: '/' })} title="Home">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="m3 10 9-7 9 7" />

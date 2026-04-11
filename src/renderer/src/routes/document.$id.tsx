@@ -6,7 +6,7 @@ import DocumentStarter from '../components/DocumentStarter'
 
 export default function DocumentPage() {
   const { id } = useParams({ strict: false }) as { id: string }
-  const { openPage, pages, activeId, toggleSidebar, isSidebarCollapsed, workspaces } = useDocumentStore()
+  const { openPage, pages, activeId, workspaces } = useDocumentStore()
 
   useEffect(() => {
     openPage(id)
@@ -21,16 +21,6 @@ export default function DocumentPage() {
   return (
     <div className="document-page">
       <div className="document-topbar">
-        <button
-          className="sidebar-toggle-btn"
-          onClick={toggleSidebar}
-          title={isSidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-            <line x1="9" y1="3" x2="9" y2="21" />
-          </svg>
-        </button>
         <nav className="document-breadcrumb" aria-label="Document path">
           {pathSegments.map((segment, index) => {
             const isCurrent = index === pathSegments.length - 1
