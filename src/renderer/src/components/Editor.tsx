@@ -91,6 +91,24 @@ function isSelectionInsideEditor(): boolean {
   return !!element?.closest('.plate-editor')
 }
 
+function isLeadingHyphenShortcut(): boolean {
+  const selection = window.getSelection()
+  if (!selection || !selection.isCollapsed || !isSelectionInsideEditor()) return false
+
+  const anchorNode = selection.anchorNode
+  if (!anchorNode || anchorNode.nodeType !== Node.TEXT_NODE) return false
+  if (selection.anchorOffset !== 1 || anchorNode.textContent?.[0] !== '-') return false
+
+  const parentElement = anchorNode.parentElement
+  const blockElement = parentElement?.closest('[data-slate-node="element"]')
+  if (!blockElement) return true
+
+  const range = document.createRange()
+  range.setStart(blockElement, 0)
+  range.setEnd(anchorNode, selection.anchorOffset)
+  return range.toString() === '-'
+}
+
 function BubbleButton({
   title,
   onMouseDown,
@@ -277,6 +295,13 @@ function EditorFloatingControls() {
         spellCheck={false}
         placeholder="Start writing…"
         onKeyDown={e => {
+          if (e.key === ' ' && isLeadingHyphenShortcut()) {
+            e.preventDefault()
+            closeMenus()
+            editor.tf.deleteBackward('character')
+            toggleList(editor, { listStyleType: 'disc' })
+            return
+          }
           if (e.key === '/') openSlashMenu()
           if (e.key === 'Escape') closeMenus()
         }}
