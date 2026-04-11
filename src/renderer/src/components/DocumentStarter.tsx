@@ -80,7 +80,7 @@ export default function DocumentStarter({ pageId }: { pageId: string }) {
                   event.currentTarget.form?.requestSubmit()
                 }
               }}
-              placeholder="What are you thinking of?"
+              placeholder="Draft a project brief, meeting notes, or study plan..."
               rows={3}
               disabled={isGenerating}
             />
