@@ -204,13 +204,15 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
     })
   }
 
-  const requestFolderDelete = (node: TaxonomyNode) => {
-    const pagesInFolder = collectFolderPages(node)
+  const requestFolderDelete = (path: string[]) => {
+    const pagesInFolder = workspacePages.filter(page =>
+      path.every((segment, index) => page.indexedPath[index] === segment),
+    )
     setContextMenu(null)
     setPendingDelete({
       ids: pagesInFolder.map(page => page.id),
       title: 'Delete folder?',
-      message: `"${node.path.join('/')}" contains ${pagesInFolder.length} ${pagesInFolder.length === 1 ? 'page' : 'pages'}. Deleting it will remove every page in that folder.`,
+      message: `"${path.join('/')}" contains ${pagesInFolder.length} ${pagesInFolder.length === 1 ? 'page' : 'pages'}. Deleting it will remove every page in that folder.`,
       confirmLabel: 'Delete folder',
     })
   }
@@ -563,16 +565,7 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
                 const page = pages.find(item => item.id === contextMenu.id)
                 if (page) requestPageDelete(page)
               } else {
-                const findNode = (nodes: TaxonomyNode[]): TaxonomyNode | null => {
-                  for (const node of nodes) {
-                    if (node.path.join('/') === contextMenu.path?.join('/')) return node
-                    const match = findNode(node.folders)
-                    if (match) return match
-                  }
-                  return null
-                }
-                const node = findNode(taxonomyRoot.folders)
-                if (node) requestFolderDelete(node)
+                requestFolderDelete(contextMenu.path ?? [])
               }
             }}
           >
