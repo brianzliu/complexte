@@ -109,6 +109,24 @@ function isLeadingHyphenShortcut(): boolean {
   return range.toString() === '-'
 }
 
+function hasActiveSlashTrigger(): boolean {
+  const selection = window.getSelection()
+  if (!selection || !selection.isCollapsed || !isSelectionInsideEditor()) return false
+
+  const anchorNode = selection.anchorNode
+  if (!anchorNode) return false
+
+  const anchorElement = anchorNode instanceof Element ? anchorNode : anchorNode.parentElement
+  const blockElement = anchorElement?.closest('[data-slate-node="element"]')
+  if (!blockElement) return false
+
+  const range = document.createRange()
+  range.setStart(blockElement, 0)
+  range.setEnd(anchorNode, selection.anchorOffset)
+
+  return /(?:^|\s)\/\S*$/.test(range.toString())
+}
+
 function BubbleButton({
   title,
   onMouseDown,
@@ -168,10 +186,23 @@ function EditorFloatingControls() {
 
   const openSlashMenu = () => {
     window.setTimeout(() => {
+      if (!hasActiveSlashTrigger()) {
+        setSlashMenu(null)
+        return
+      }
+
       const position = getSelectionPosition()
       if (position) {
         setSlashMenu({ x: position.x, y: position.y + 28 })
         setSelectionMenu(null)
+      }
+    }, 0)
+  }
+
+  const syncSlashMenu = () => {
+    window.setTimeout(() => {
+      if (!hasActiveSlashTrigger()) {
+        setSlashMenu(null)
       }
     }, 0)
   }
@@ -305,6 +336,7 @@ function EditorFloatingControls() {
           if (e.key === '/') openSlashMenu()
           if (e.key === 'Escape') closeMenus()
         }}
+        onKeyUp={syncSlashMenu}
       />
     </>
   )
