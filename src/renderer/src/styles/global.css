@@ -25,10 +25,11 @@
   --text-2:        rgba(255, 255, 255, 0.5);
   --text-3:        rgba(255, 255, 255, 0.28);
 
-  /* Accent */
-  --accent:        #19c37d;
-  --accent-dim:    rgba(25, 195, 125, 0.14);
+  /* Neutral accent */
+  --accent:        #c7c7c7;
+  --accent-dim:    rgba(255, 255, 255, 0.14);
   --accent-text:   #0d0d0d;
+  --selection-bg:  rgba(255, 255, 255, 0.2);
 
   /* Danger */
   --danger:        #f87171;
@@ -75,9 +76,10 @@
   --text-2:        rgba(0, 0, 0, 0.52);
   --text-3:        rgba(0, 0, 0, 0.3);
 
-  --accent:        #0ea874;
-  --accent-dim:    rgba(14, 168, 116, 0.12);
+  --accent:        #3a3a3a;
+  --accent-dim:    rgba(0, 0, 0, 0.1);
   --accent-text:   #ffffff;
+  --selection-bg:  rgba(0, 0, 0, 0.16);
 
   --danger:        #dc2626;
   --danger-dim:    rgba(220, 38, 38, 0.08);
@@ -134,7 +136,7 @@ input, textarea {
 }
 
 ::selection {
-  background: rgba(25, 195, 125, 0.22);
+  background: var(--selection-bg);
 }
 
 ::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -1301,7 +1303,7 @@ input, textarea {
 .prose a {
   color: var(--accent);
   text-decoration: none;
-  border-bottom: 1px solid rgba(25, 195, 125, 0.3);
+  border-bottom: 1px solid var(--accent-dim);
   transition: border-color var(--fast);
 }
 .prose a:hover { border-color: var(--accent); }
