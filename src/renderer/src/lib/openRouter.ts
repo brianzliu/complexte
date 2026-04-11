@@ -16,6 +16,14 @@ export async function generateDocument(request: GenerateDocumentRequest): Promis
   const bridge = (window as Window & { openRouter?: OpenRouterBridge }).openRouter
   if (!bridge) throw new Error('OpenRouter is not available in this window.')
 
-  const response = await bridge.generateDocument(request)
-  return response.content
+  try {
+    const response = await bridge.generateDocument(request)
+    return response.content
+  } catch (error) {
+    if (!(error instanceof Error)) throw error
+
+    throw new Error(
+      error.message.replace(/^Error invoking remote method 'openrouter:generate-document': Error:\s*/, ''),
+    )
+  }
 }
