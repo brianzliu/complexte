@@ -6,7 +6,7 @@ import Sidebar from '../components/Sidebar'
 import TabBar from '../components/TabBar'
 
 export default function Root() {
-  const { isSidebarCollapsed, toggleSidebar, createPage, theme } = useDocumentStore()
+  const { activeId, activeWorkspaceId, isSidebarCollapsed, toggleSidebar, createPage, pages, theme } = useDocumentStore()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -34,11 +34,24 @@ export default function Root() {
     navigate({ to: '/document/$id', params: { id: page.id } })
   }, [createPage, navigate])
 
+  const handleNewPageInCurrentFolder = useCallback(() => {
+    const activePage = activeId
+      ? pages.find(page => page.id === activeId && page.workspaceId === activeWorkspaceId)
+      : null
+    const currentFolder = activePage?.indexedPath.length ? activePage.indexedPath : ['Inbox']
+    const page = createPage('Untitled', currentFolder)
+    navigate({ to: '/document/$id', params: { id: page.id } })
+  }, [activeId, activeWorkspaceId, createPage, navigate, pages])
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
         e.preventDefault()
         handleNewPage()
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 't') {
+        e.preventDefault()
+        handleNewPageInCurrentFolder()
       }
       if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
         e.preventDefault()
@@ -47,7 +60,7 @@ export default function Root() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [handleNewPage, toggleSidebar])
+  }, [handleNewPage, handleNewPageInCurrentFolder, toggleSidebar])
 
   return (
     <div className={`app-layout ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>

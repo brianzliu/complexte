@@ -214,7 +214,7 @@ interface DocumentStore {
   saveDocument: () => void
   createWorkspace: (name: string) => Workspace
   setActiveWorkspace: (id: string) => void
-  createPage: (name: string) => PageMeta
+  createPage: (name: string, indexedPath?: string[]) => PageMeta
   deletePage: (id: string) => void
   renamePage: (id: string, newName: string) => void
   toggleSidebar: () => void
@@ -354,7 +354,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set({ activeWorkspaceId: id, activeId: null, content: '' })
   },
 
-  createPage: (name: string) => {
+  createPage: (name: string, indexedPath = ['Inbox']) => {
     const { activeWorkspaceId, pages } = get()
     const siblingCount = pages.filter(item => item.workspaceId === activeWorkspaceId).length
     const id = generatePageId(name)
@@ -362,7 +362,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       id,
       workspaceId: activeWorkspaceId,
       name,
-      indexedPath: ['Inbox'],
+      indexedPath,
       modified: new Date().toISOString(),
       order: siblingCount,
       isInitialized: false,

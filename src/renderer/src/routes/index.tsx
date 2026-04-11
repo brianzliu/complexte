@@ -72,6 +72,12 @@ export default function IndexPage() {
             </div>
             <div className="shortcut-item">
               <div className="shortcut-keys">
+                <kbd>⌘</kbd><kbd>T</kbd>
+              </div>
+              <span>New page here</span>
+            </div>
+            <div className="shortcut-item">
+              <div className="shortcut-keys">
                 <kbd>⌘</kbd><kbd>\</kbd>
               </div>
               <span>Toggle sidebar</span>
