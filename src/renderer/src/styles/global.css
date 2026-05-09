@@ -1217,7 +1217,20 @@ input, textarea {
 }
 
 .document-related-pill {
+  gap: 8px;
   transition: background var(--fast), color var(--fast), border-color var(--fast);
+}
+
+.document-related-pill strong {
+  color: var(--text-3);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.45px;
+}
+
+.document-related-pill span {
+  color: inherit;
 }
 
 .document-related-pill:hover {
@@ -1414,6 +1427,18 @@ input, textarea {
 
 .relationship-map-edge.primary {
   stroke: rgba(255, 255, 255, 0.2);
+}
+
+.relationship-map-edge.supports {
+  stroke: rgba(187, 247, 208, 0.34);
+}
+
+.relationship-map-edge.extends {
+  stroke: rgba(191, 219, 254, 0.34);
+}
+
+.relationship-map-edge.derived_from {
+  stroke: rgba(253, 224, 71, 0.34);
 }
 
 .relationship-map-node {

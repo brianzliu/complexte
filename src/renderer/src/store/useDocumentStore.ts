@@ -9,7 +9,7 @@ import {
 } from '../lib/plateDocument'
 import { loadPersistedSnapshot, savePersistedSnapshot } from '../lib/documentPersistence'
 import { buildSemanticVector, organizeDocument } from '../lib/documentIntelligence'
-import type { DocumentRevision, PageMeta, PersistedDocumentContent, PersistedDocumentSnapshot, PromptSession, SelectionAiAction, Workspace } from '../../../shared/documentSnapshot'
+import type { DocumentLink, DocumentRevision, PageMeta, PersistedDocumentContent, PersistedDocumentSnapshot, PromptSession, SelectionAiAction, Workspace } from '../../../shared/documentSnapshot'
 
 export type Theme = 'dark' | 'light' | 'auto'
 export type { DocumentRevision, PageMeta, PromptSession, SelectionAiAction, Workspace } from '../../../shared/documentSnapshot'
@@ -129,14 +129,18 @@ const INITIAL_WORKSPACES: Workspace[] = [
   { id: 'client-work', name: 'Client Work', modified: new Date(2026, 3, 10, 14, 30).toISOString() },
 ]
 
+function createDefaultRelatedLinks(relatedIds: string[]): DocumentLink[] {
+  return relatedIds.map(targetId => ({ targetId, type: 'related_to' }))
+}
+
 const INITIAL_PAGES: PageMeta[] = [
-  { id: 'getting-started', workspaceId: 'personal', name: 'Getting Started', indexedPath: ['Inbox'], collections: ['Inbox', 'Projects'], relatedIds: ['scratch'], semanticVector: buildSemanticVector('Getting Started', MOCK_CONTENT['getting-started'], ['Inbox', 'Projects']), organizationConfidence: 0.58, modified: new Date(2026, 3, 11, 9, 0).toISOString(), order: 0, isInitialized: true },
-  { id: 'project-roadmap', workspaceId: 'personal', name: 'Project Roadmap', indexedPath: ['Projects', 'Roadmap'], collections: ['Projects', 'Design'], relatedIds: ['design-philosophy'], semanticVector: buildSemanticVector('Project Roadmap', MOCK_CONTENT['project-roadmap'], ['Projects', 'Design']), organizationConfidence: 0.9, modified: new Date(2026, 3, 10, 14, 30).toISOString(), order: 1, isInitialized: true },
-  { id: 'meeting-notes', workspaceId: 'personal', name: 'Meeting Notes', indexedPath: ['Work', 'Meetings'], collections: ['Work', 'Projects'], relatedIds: ['project-roadmap'], semanticVector: buildSemanticVector('Meeting Notes', MOCK_CONTENT['meeting-notes'], ['Work', 'Projects']), organizationConfidence: 0.82, modified: new Date(2026, 3, 11, 10, 15).toISOString(), order: 2, isInitialized: true },
-  { id: 'design-philosophy', workspaceId: 'personal', name: 'Design Philosophy', indexedPath: ['Projects', 'Design'], collections: ['Projects', 'Design'], relatedIds: ['project-roadmap'], semanticVector: buildSemanticVector('Design Philosophy', MOCK_CONTENT['design-philosophy'], ['Projects', 'Design']), organizationConfidence: 0.86, modified: new Date(2026, 3, 8, 16, 0).toISOString(), order: 3, isInitialized: true },
-  { id: 'scratch', workspaceId: 'personal', name: 'Scratch Pad', indexedPath: ['Inbox'], collections: ['Inbox'], relatedIds: ['getting-started'], semanticVector: buildSemanticVector('Scratch Pad', MOCK_CONTENT['scratch'], ['Inbox']), organizationConfidence: 0.38, modified: new Date(2026, 3, 11, 8, 45).toISOString(), order: 4, isInitialized: true },
-  { id: 'research', workspaceId: 'client-work', name: 'Research', indexedPath: ['Research'], collections: ['Research'], relatedIds: ['drafts'], semanticVector: buildSemanticVector('Research', MOCK_CONTENT['research'], ['Research']), organizationConfidence: 0.8, modified: new Date(2026, 3, 9, 11, 30).toISOString(), order: 0, isInitialized: true },
-  { id: 'drafts', workspaceId: 'client-work', name: 'Drafts', indexedPath: ['Writing', 'Drafts'], collections: ['Writing', 'Research'], relatedIds: ['research'], semanticVector: buildSemanticVector('Drafts', MOCK_CONTENT['drafts'], ['Writing', 'Research']), organizationConfidence: 0.72, modified: new Date(2026, 3, 9, 12, 15).toISOString(), order: 1, isInitialized: true },
+  { id: 'getting-started', workspaceId: 'personal', name: 'Getting Started', indexedPath: ['Inbox'], collections: ['Inbox', 'Projects'], relatedIds: ['scratch'], relatedLinks: [{ targetId: 'scratch', type: 'related_to' }], semanticVector: buildSemanticVector('Getting Started', MOCK_CONTENT['getting-started'], ['Inbox', 'Projects']), organizationConfidence: 0.58, modified: new Date(2026, 3, 11, 9, 0).toISOString(), order: 0, isInitialized: true },
+  { id: 'project-roadmap', workspaceId: 'personal', name: 'Project Roadmap', indexedPath: ['Projects', 'Roadmap'], collections: ['Projects', 'Design'], relatedIds: ['design-philosophy'], relatedLinks: [{ targetId: 'design-philosophy', type: 'extends' }], semanticVector: buildSemanticVector('Project Roadmap', MOCK_CONTENT['project-roadmap'], ['Projects', 'Design']), organizationConfidence: 0.9, modified: new Date(2026, 3, 10, 14, 30).toISOString(), order: 1, isInitialized: true },
+  { id: 'meeting-notes', workspaceId: 'personal', name: 'Meeting Notes', indexedPath: ['Work', 'Meetings'], collections: ['Work', 'Projects'], relatedIds: ['project-roadmap'], relatedLinks: [{ targetId: 'project-roadmap', type: 'supports' }], semanticVector: buildSemanticVector('Meeting Notes', MOCK_CONTENT['meeting-notes'], ['Work', 'Projects']), organizationConfidence: 0.82, modified: new Date(2026, 3, 11, 10, 15).toISOString(), order: 2, isInitialized: true },
+  { id: 'design-philosophy', workspaceId: 'personal', name: 'Design Philosophy', indexedPath: ['Projects', 'Design'], collections: ['Projects', 'Design'], relatedIds: ['project-roadmap'], relatedLinks: [{ targetId: 'project-roadmap', type: 'extends' }], semanticVector: buildSemanticVector('Design Philosophy', MOCK_CONTENT['design-philosophy'], ['Projects', 'Design']), organizationConfidence: 0.86, modified: new Date(2026, 3, 8, 16, 0).toISOString(), order: 3, isInitialized: true },
+  { id: 'scratch', workspaceId: 'personal', name: 'Scratch Pad', indexedPath: ['Inbox'], collections: ['Inbox'], relatedIds: ['getting-started'], relatedLinks: [{ targetId: 'getting-started', type: 'related_to' }], semanticVector: buildSemanticVector('Scratch Pad', MOCK_CONTENT['scratch'], ['Inbox']), organizationConfidence: 0.38, modified: new Date(2026, 3, 11, 8, 45).toISOString(), order: 4, isInitialized: true },
+  { id: 'research', workspaceId: 'client-work', name: 'Research', indexedPath: ['Research'], collections: ['Research'], relatedIds: ['drafts'], relatedLinks: [{ targetId: 'drafts', type: 'supports' }], semanticVector: buildSemanticVector('Research', MOCK_CONTENT['research'], ['Research']), organizationConfidence: 0.8, modified: new Date(2026, 3, 9, 11, 30).toISOString(), order: 0, isInitialized: true },
+  { id: 'drafts', workspaceId: 'client-work', name: 'Drafts', indexedPath: ['Writing', 'Drafts'], collections: ['Writing', 'Research'], relatedIds: ['research'], relatedLinks: [{ targetId: 'research', type: 'derived_from' }], semanticVector: buildSemanticVector('Drafts', MOCK_CONTENT['drafts'], ['Writing', 'Research']), organizationConfidence: 0.72, modified: new Date(2026, 3, 9, 12, 15).toISOString(), order: 1, isInitialized: true },
 ]
 
 let contentStore: Record<string, PlateDocumentValue> = Object.fromEntries(
@@ -245,6 +249,7 @@ function clonePages(pages: PageMeta[]): PageMeta[] {
     indexedPath: [...page.indexedPath],
     collections: [...page.collections],
     relatedIds: [...page.relatedIds],
+    relatedLinks: page.relatedLinks.map(link => ({ ...link })),
     semanticVector: [...page.semanticVector],
     organizationConfidence: page.organizationConfidence,
   }))
@@ -269,7 +274,7 @@ function buildSnapshot(state: Pick<
   'workspaces' | 'activeWorkspaceId' | 'pages' | 'activeId' | 'openTabIds' | 'promptSessions' | 'selectionAiActions' | 'documentRevisions'
 >): PersistedDocumentSnapshot {
   return {
-    version: 5,
+    version: 6,
     workspaces: cloneWorkspaces(state.workspaces),
     activeWorkspaceId: state.activeWorkspaceId,
     pages: clonePages(state.pages),
@@ -295,6 +300,7 @@ function applySnapshot(snapshot: PersistedDocumentSnapshot): Pick<
     ...page,
     collections: page.collections ?? [],
     relatedIds: page.relatedIds ?? [],
+    relatedLinks: page.relatedLinks ?? createDefaultRelatedLinks(page.relatedIds ?? []),
     semanticVector: page.semanticVector ?? [],
     organizationConfidence: page.organizationConfidence ?? 0,
   }))
@@ -476,6 +482,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
             indexedPath: organization.indexedPath,
             collections: organization.collections,
             relatedIds: organization.relatedIds,
+            relatedLinks: organization.relatedLinks,
             semanticVector,
             organizationConfidence: organization.confidence,
             modified,
@@ -529,6 +536,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
             indexedPath: organization.indexedPath,
             collections: organization.collections,
             relatedIds: organization.relatedIds,
+            relatedLinks: organization.relatedLinks,
             semanticVector,
             organizationConfidence: organization.confidence,
             modified,
@@ -589,6 +597,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       indexedPath,
       collections: indexedPath.slice(0, 1),
       relatedIds: [],
+      relatedLinks: [],
       semanticVector: buildSemanticVector(name, '', indexedPath.slice(0, 1)),
       organizationConfidence: 0,
       modified: new Date().toISOString(),
@@ -632,7 +641,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           },
           getWorkspaceDocuments(pages, page.workspaceId, id),
         )
-      : { indexedPath: ['Inbox'], collections: ['Inbox'], relatedIds: [], confidence: 0, suggestions: [] }
+      : { indexedPath: ['Inbox'], collections: ['Inbox'], relatedIds: [], relatedLinks: [], confidence: 0, suggestions: [] }
     set(state => ({
       pages: state.pages.map(page => page.id === id
         ? {
@@ -641,6 +650,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
             indexedPath: organization.indexedPath,
             collections: organization.collections,
             relatedIds: organization.relatedIds,
+            relatedLinks: organization.relatedLinks,
             semanticVector: buildSemanticVector(newName, plateDocumentToPlainText(contentStore[id] ?? emptyPlateDocument()), organization.collections),
             organizationConfidence: organization.confidence,
             modified,
@@ -742,6 +752,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
             indexedPath: organization.indexedPath,
             collections: organization.collections,
             relatedIds: organization.relatedIds,
+            relatedLinks: organization.relatedLinks,
             semanticVector,
             organizationConfidence: organization.confidence,
             modified,
@@ -795,6 +806,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
             indexedPath: [...indexedPath],
             collections,
             relatedIds: organization.relatedIds,
+            relatedLinks: organization.relatedLinks,
             semanticVector,
             organizationConfidence: Math.max(organization.confidence, 0.58),
             modified,

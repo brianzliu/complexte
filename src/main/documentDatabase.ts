@@ -4,7 +4,7 @@ import { createRequire } from 'node:module'
 import { app } from 'electron'
 import initSqlJs from 'sql.js'
 import type { Database, SqlJsStatic } from 'sql.js'
-import type { DocumentRevision, PageMeta, PersistedDocumentSnapshot, PromptSession, SelectionAiAction, Workspace } from '../shared/documentSnapshot'
+import type { DocumentLink, DocumentRevision, PageMeta, PersistedDocumentSnapshot, PromptSession, SelectionAiAction, Workspace } from '../shared/documentSnapshot'
 
 const require = createRequire(import.meta.url)
 const sqlWasmPath = require.resolve('sql.js/dist/sql-wasm.wasm')
@@ -36,6 +36,10 @@ function parseJson<T>(value: unknown, fallback: T): T {
 
 function serializeJson(value: unknown): string {
   return JSON.stringify(value)
+}
+
+function createDefaultRelatedLinks(relatedIds: string[]): DocumentLink[] {
+  return relatedIds.map(targetId => ({ targetId, type: 'related_to' }))
 }
 
 function hasColumn(db: Database, tableName: string, columnName: string): boolean {
@@ -98,6 +102,7 @@ class DocumentDatabase {
         indexed_path TEXT NOT NULL,
         collections_json TEXT NOT NULL DEFAULT '[]',
         related_ids_json TEXT NOT NULL DEFAULT '[]',
+        related_links_json TEXT NOT NULL DEFAULT '[]',
         semantic_vector_json TEXT NOT NULL DEFAULT '[]',
         organization_confidence REAL NOT NULL DEFAULT 0,
         modified TEXT NOT NULL,
@@ -114,6 +119,10 @@ class DocumentDatabase {
 
     if (!hasColumn(this.db, 'pages', 'related_ids_json')) {
       this.db.run(`ALTER TABLE pages ADD COLUMN related_ids_json TEXT NOT NULL DEFAULT '[]';`)
+    }
+
+    if (!hasColumn(this.db, 'pages', 'related_links_json')) {
+      this.db.run(`ALTER TABLE pages ADD COLUMN related_links_json TEXT NOT NULL DEFAULT '[]';`)
     }
 
     if (!hasColumn(this.db, 'pages', 'semantic_vector_json')) {
@@ -168,6 +177,7 @@ class DocumentDatabase {
           indexed_path,
           collections_json,
           related_ids_json,
+          related_links_json,
           semantic_vector_json,
           organization_confidence,
           modified,
@@ -210,6 +220,7 @@ class DocumentDatabase {
       indexedPath: parseJson<string[]>(row.indexed_path, []),
       collections: parseJson<string[]>(row.collections_json, []),
       relatedIds: parseJson<string[]>(row.related_ids_json, []),
+      relatedLinks: parseJson<DocumentLink[]>(row.related_links_json, createDefaultRelatedLinks(parseJson<string[]>(row.related_ids_json, []))),
       semanticVector: parseJson<number[]>(row.semantic_vector_json, []),
       organizationConfidence: Number(row.organization_confidence ?? 0),
       modified: String(row.modified ?? new Date().toISOString()),
@@ -225,7 +236,7 @@ class DocumentDatabase {
     const documentRevisions = parseJson<DocumentRevision[]>(appState.document_revisions_json, [])
 
     return {
-      version: 5,
+      version: 6,
       workspaces,
       activeWorkspaceId: String(appState.active_workspace_id ?? workspaces[0]?.id ?? ''),
       pages,
@@ -265,13 +276,14 @@ class DocumentDatabase {
               indexed_path,
               collections_json,
               related_ids_json,
+              related_links_json,
               semantic_vector_json,
               organization_confidence,
               modified,
               display_order,
               is_initialized,
               content_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
           `,
           [
             page.id,
@@ -280,6 +292,7 @@ class DocumentDatabase {
             serializeJson(page.indexedPath),
             serializeJson(page.collections),
             serializeJson(page.relatedIds),
+            serializeJson(page.relatedLinks),
             serializeJson(page.semanticVector),
             page.organizationConfidence,
             page.modified,

@@ -2,9 +2,16 @@ import { useNavigate, useParams } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { useDocumentStore } from '../store/useDocumentStore'
 import { organizeDocument } from '../lib/documentIntelligence'
+import type { DocumentLinkType } from '../../../shared/documentSnapshot'
 import Editor from '../components/Editor'
 import DocumentStarter from '../components/DocumentStarter'
 import RelationshipMap from '../components/RelationshipMap'
+
+function formatLinkType(type: DocumentLinkType): string {
+  if (type === 'related_to') return 'related'
+  if (type === 'derived_from') return 'derived from'
+  return type
+}
 
 export default function DocumentPage() {
   const navigate = useNavigate()
@@ -33,8 +40,11 @@ export default function DocumentPage() {
     ? pages.filter(item => item.workspaceId === page.workspaceId)
     : []
   const relatedPages = page
-    ? page.relatedIds
-        .map(relatedId => pages.find(item => item.id === relatedId && item.workspaceId === page.workspaceId))
+    ? page.relatedLinks
+        .map(link => {
+          const relatedPage = pages.find(item => item.id === link.targetId && item.workspaceId === page.workspaceId)
+          return relatedPage ? { page: relatedPage, type: link.type } : null
+        })
         .filter((relatedPage): relatedPage is NonNullable<typeof relatedPage> => Boolean(relatedPage))
     : []
   const recentAiActions = page
@@ -166,11 +176,12 @@ export default function DocumentPage() {
                 <div className="document-related-list">
                   {relatedPages.map(relatedPage => (
                     <button
-                      key={relatedPage.id}
+                      key={relatedPage.page.id}
                       className="document-related-pill"
-                      onClick={() => navigate({ to: '/document/$id', params: { id: relatedPage.id } })}
+                      onClick={() => navigate({ to: '/document/$id', params: { id: relatedPage.page.id } })}
                     >
-                      {relatedPage.name}
+                      <strong>{formatLinkType(relatedPage.type)}</strong>
+                      <span>{relatedPage.page.name}</span>
                     </button>
                   ))}
                 </div>

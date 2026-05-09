@@ -6,6 +6,13 @@ type WorkspaceDocument = {
   semanticVector?: number[]
 }
 
+type DocumentLinkType = 'supports' | 'extends' | 'related_to' | 'derived_from'
+
+export type InferredDocumentLink = {
+  targetId: string
+  type: DocumentLinkType
+}
+
 type CollectionCandidate = {
   label: string
   path: string[]
@@ -36,6 +43,7 @@ type OrganizationResult = {
   indexedPath: string[]
   collections: string[]
   relatedIds: string[]
+  relatedLinks: InferredDocumentLink[]
   confidence: number
   suggestions: OrganizationSuggestion[]
 }
@@ -157,6 +165,35 @@ function scoreCollectionFit(title: string, body: string, candidate: CollectionCa
   const candidateVector = buildSemanticVector(candidate.label, candidate.keywords.join(' '))
   const documentVector = buildSemanticVector(title, body)
   return cosineSimilarity(candidateVector, documentVector) * 10
+}
+
+function hasAnyKeyword(value: string, keywords: string[]): boolean {
+  return keywords.some(keyword => value.includes(keyword))
+}
+
+function inferLinkType(source: WorkspaceDocument, target: WorkspaceDocument): DocumentLinkType {
+  const sourceText = `${source.name}\n${source.content}`.toLowerCase()
+  const targetText = `${target.name}\n${target.content}`.toLowerCase()
+
+  if (
+    hasAnyKeyword(sourceText, ['draft', 'outline', 'proposal', 'brief', 'essay', 'article'])
+    && hasAnyKeyword(targetText, ['research', 'notes', 'meeting', 'findings', 'reference', 'source'])
+  ) {
+    return 'derived_from'
+  }
+
+  if (
+    hasAnyKeyword(sourceText, ['meeting', 'notes', 'research', 'findings', 'reference', 'decision'])
+    && hasAnyKeyword(targetText, ['project', 'roadmap', 'plan', 'draft', 'design', 'brief'])
+  ) {
+    return 'supports'
+  }
+
+  if (source.indexedPath[0] && source.indexedPath[0] === target.indexedPath[0]) {
+    return 'extends'
+  }
+
+  return 'related_to'
 }
 
 export function findRelatedDocuments(
@@ -358,6 +395,10 @@ export function organizeDocument(
     indexedPath,
     collections,
     relatedIds: relatedDocuments.map(document => document.id),
+    relatedLinks: relatedDocuments.map(document => ({
+      targetId: document.id,
+      type: inferLinkType(target, document),
+    })),
     confidence,
     suggestions,
   }

@@ -1,4 +1,5 @@
 import type { PageMeta } from '../store/useDocumentStore'
+import type { DocumentLinkType } from '../../../shared/documentSnapshot'
 
 interface RelationshipMapProps {
   page: PageMeta
@@ -15,6 +16,7 @@ type MapNode = {
 type MapEdge = {
   from: string
   to: string
+  type: DocumentLinkType
 }
 
 type PositionedNode = MapNode & {
@@ -29,7 +31,8 @@ function buildGraph(page: PageMeta, workspacePages: PageMeta[]): { nodes: MapNod
 
   nodes.set(page.id, { id: page.id, name: page.name, role: 'center' })
 
-  const directRelatedIds = page.relatedIds
+  const directRelatedIds = page.relatedLinks
+    .map(link => link.targetId)
     .filter(id => pagesById.has(id))
     .slice(0, 5)
 
@@ -37,23 +40,31 @@ function buildGraph(page: PageMeta, workspacePages: PageMeta[]): { nodes: MapNod
     const related = pagesById.get(id)
     if (!related) return
     nodes.set(id, { id, name: related.name, role: 'direct' })
-    edges.set(`${page.id}:${id}`, { from: page.id, to: id })
+    edges.set(`${page.id}:${id}`, {
+      from: page.id,
+      to: id,
+      type: page.relatedLinks.find(link => link.targetId === id)?.type ?? 'related_to',
+    })
   })
 
   const backlinks = workspacePages
-    .filter(candidate => candidate.id !== page.id && candidate.relatedIds.includes(page.id))
+    .filter(candidate => candidate.id !== page.id && candidate.relatedLinks.some(link => link.targetId === page.id))
     .slice(0, 4)
 
   backlinks.forEach(backlink => {
     if (!nodes.has(backlink.id)) {
       nodes.set(backlink.id, { id: backlink.id, name: backlink.name, role: 'backlink' })
     }
-    edges.set(`${backlink.id}:${page.id}`, { from: backlink.id, to: page.id })
+    edges.set(`${backlink.id}:${page.id}`, {
+      from: backlink.id,
+      to: page.id,
+      type: backlink.relatedLinks.find(link => link.targetId === page.id)?.type ?? 'related_to',
+    })
   })
 
   const neighborIds = Array.from(nodes.values())
     .filter(node => node.role !== 'center')
-    .flatMap(node => pagesById.get(node.id)?.relatedIds ?? [])
+    .flatMap(node => pagesById.get(node.id)?.relatedLinks.map(link => link.targetId) ?? [])
     .filter(id => id !== page.id && !nodes.has(id))
     .slice(0, 4)
 
@@ -68,11 +79,11 @@ function buildGraph(page: PageMeta, workspacePages: PageMeta[]): { nodes: MapNod
     .forEach(node => {
       const sourcePage = pagesById.get(node.id)
       if (!sourcePage) return
-      sourcePage.relatedIds
-        .filter(id => nodes.has(id))
+      sourcePage.relatedLinks
+        .filter(link => nodes.has(link.targetId))
         .slice(0, 3)
-        .forEach(targetId => {
-          edges.set(`${node.id}:${targetId}`, { from: node.id, to: targetId })
+        .forEach(link => {
+          edges.set(`${node.id}:${link.targetId}`, { from: node.id, to: link.targetId, type: link.type })
         })
     })
 
@@ -136,7 +147,7 @@ export default function RelationshipMap({ page, workspacePages, onOpenPage }: Re
                 y1={from.y}
                 x2={to.x}
                 y2={to.y}
-                className={`relationship-map-edge ${from.id === page.id || to.id === page.id ? 'primary' : ''}`}
+                className={`relationship-map-edge ${from.id === page.id || to.id === page.id ? 'primary' : ''} ${edge.type}`}
               />
             )
           })}

@@ -4,6 +4,13 @@ export interface Workspace {
   modified: string
 }
 
+export type DocumentLinkType = 'supports' | 'extends' | 'related_to' | 'derived_from'
+
+export interface DocumentLink {
+  targetId: string
+  type: DocumentLinkType
+}
+
 export interface PromptSession {
   id: string
   workspaceId: string
@@ -41,6 +48,7 @@ export interface PageMeta {
   indexedPath: string[]
   collections: string[]
   relatedIds: string[]
+  relatedLinks: DocumentLink[]
   semanticVector: number[]
   organizationConfidence: number
   modified: string
@@ -51,7 +59,7 @@ export interface PageMeta {
 export type PersistedDocumentContent = unknown[]
 
 export interface PersistedDocumentSnapshot {
-  version: 5
+  version: 6
   workspaces: Workspace[]
   activeWorkspaceId: string
   pages: PageMeta[]
