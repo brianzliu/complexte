@@ -2,7 +2,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useDocumentStore } from '../store/useDocumentStore'
 
 export default function IndexPage() {
-  const { activeWorkspaceId, createPage, initializePage, pages, promptSessions, workspaces } = useDocumentStore()
+  const { activeWorkspaceId, createPage, initializePage, pages, promptSessions, setDraftPromptSeed, workspaces } = useDocumentStore()
   const navigate = useNavigate()
   const activeWorkspace = workspaces.find(workspace => workspace.id === activeWorkspaceId)
 
@@ -14,6 +14,12 @@ export default function IndexPage() {
   const handleNewBlankPage = () => {
     const page = createPage('Untitled')
     initializePage(page.id)
+    navigate({ to: '/document/$id', params: { id: page.id } })
+  }
+
+  const handleRetryPrompt = (prompt: string) => {
+    const page = createPage('Untitled')
+    setDraftPromptSeed(page.id, prompt)
     navigate({ to: '/document/$id', params: { id: page.id } })
   }
 
@@ -83,13 +89,13 @@ export default function IndexPage() {
                 <button
                   key={session.id}
                   className="welcome-recent-item"
-                  onClick={() => navigate({ to: '/document/$id', params: { id: session.pageId } })}
+                  onClick={() => handleRetryPrompt(session.prompt)}
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 3v18" />
                     <path d="M7 8h8a4 4 0 1 1 0 8H9" />
                   </svg>
-                  <span>{session.prompt}</span>
+                  <span>Retry: {session.prompt}</span>
                 </button>
               ))}
             </div>

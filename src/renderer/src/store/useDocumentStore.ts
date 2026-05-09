@@ -199,6 +199,7 @@ interface DocumentStore {
   pages: PageMeta[]
   activeId: string | null
   openTabIds: string[]
+  draftPromptSeeds: Record<string, string>
   promptSessions: PromptSession[]
   selectionAiActions: SelectionAiAction[]
   documentRevisions: DocumentRevision[]
@@ -229,6 +230,8 @@ interface DocumentStore {
   addDocumentRevision: (revision: Omit<DocumentRevision, 'id' | 'createdAt' | 'preview'>) => void
   restoreDocumentRevision: (revisionId: string) => void
   applyPageOrganization: (id: string, indexedPath: string[]) => void
+  setDraftPromptSeed: (id: string, prompt: string) => void
+  takeDraftPromptSeed: (id: string) => string
   getPageContent: (id: string) => string
 }
 
@@ -367,6 +370,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   pages: clonePages(INITIAL_PAGES),
   activeId: null,
   openTabIds: [],
+  draftPromptSeeds: {},
   promptSessions: [],
   selectionAiActions: [],
   documentRevisions: [],
@@ -606,6 +610,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set(state => ({
       pages: state.pages.filter(page => page.id !== id),
       openTabIds: state.openTabIds.filter(tabId => tabId !== id),
+      draftPromptSeeds: Object.fromEntries(Object.entries(state.draftPromptSeeds).filter(([pageId]) => pageId !== id)),
       activeId: activeId === id ? null : activeId,
       content: activeId === id ? emptyPlateDocument() : state.content,
       contentVersion: activeId === id ? state.contentVersion + 1 : state.contentVersion,
@@ -801,6 +806,27 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       ),
     })
     queuePersist(get())
+  },
+
+  setDraftPromptSeed: (id, prompt) => {
+    set(state => ({
+      draftPromptSeeds: {
+        ...state.draftPromptSeeds,
+        [id]: prompt,
+      },
+    }))
+  },
+
+  takeDraftPromptSeed: id => {
+    const prompt = get().draftPromptSeeds[id] ?? ''
+    if (!prompt) return ''
+
+    set(state => ({
+      draftPromptSeeds: Object.fromEntries(
+        Object.entries(state.draftPromptSeeds).filter(([pageId]) => pageId !== id),
+      ),
+    }))
+    return prompt
   },
 
   getPageContent: (id: string) => plateDocumentToMarkdown(contentStore[id] ?? emptyPlateDocument()),

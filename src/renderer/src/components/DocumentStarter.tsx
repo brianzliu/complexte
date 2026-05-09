@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { streamDocument } from '../lib/openRouter'
 import { findRelevantChunks } from '../lib/documentIntelligence'
 import { markdownToPlateDocument } from '../lib/plateDocument'
@@ -44,7 +44,7 @@ function buildGenerationPrompt(
 }
 
 export default function DocumentStarter({ pageId }: { pageId: string }) {
-  const { addDocumentRevision, addPromptSession, aiSettings, getPageContent, initializePage, pages, setPageContent } = useDocumentStore()
+  const { addDocumentRevision, addPromptSession, aiSettings, getPageContent, initializePage, pages, setPageContent, takeDraftPromptSeed } = useDocumentStore()
   const [prompt, setPrompt] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -77,6 +77,11 @@ export default function DocumentStarter({ pageId }: { pageId: string }) {
     () => prompt.trim().length > 0 && hasOpenRouterKey && !isGenerating,
     [hasOpenRouterKey, isGenerating, prompt],
   )
+
+  useEffect(() => {
+    const seededPrompt = takeDraftPromptSeed(pageId)
+    if (seededPrompt) setPrompt(seededPrompt)
+  }, [pageId, takeDraftPromptSeed])
 
   const handleGenerate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
