@@ -228,6 +228,7 @@ interface DocumentStore {
   addSelectionAiAction: (action: Omit<SelectionAiAction, 'id' | 'createdAt'>) => void
   addDocumentRevision: (revision: Omit<DocumentRevision, 'id' | 'createdAt' | 'preview'>) => void
   restoreDocumentRevision: (revisionId: string) => void
+  applyPageOrganization: (id: string, indexedPath: string[]) => void
   getPageContent: (id: string) => string
 }
 
@@ -265,7 +266,7 @@ function buildSnapshot(state: Pick<
   'workspaces' | 'activeWorkspaceId' | 'pages' | 'activeId' | 'openTabIds' | 'promptSessions' | 'selectionAiActions' | 'documentRevisions'
 >): PersistedDocumentSnapshot {
   return {
-    version: 3,
+    version: 5,
     workspaces: cloneWorkspaces(state.workspaces),
     activeWorkspaceId: state.activeWorkspaceId,
     pages: clonePages(state.pages),
@@ -626,7 +627,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           },
           getWorkspaceDocuments(pages, page.workspaceId, id),
         )
-      : { indexedPath: ['Inbox'], collections: ['Inbox'], relatedIds: [] }
+      : { indexedPath: ['Inbox'], collections: ['Inbox'], relatedIds: [], confidence: 0, suggestions: [] }
     set(state => ({
       pages: state.pages.map(page => page.id === id
         ? {
@@ -724,6 +725,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       },
       getWorkspaceDocuments(pages, page.workspaceId, page.id),
     )
+    const semanticVector = buildSemanticVector(page.name, plainText, organization.collections)
 
     contentStore[page.id] = clonePlateDocument(nextContent)
     set({
@@ -735,6 +737,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
             indexedPath: organization.indexedPath,
             collections: organization.collections,
             relatedIds: organization.relatedIds,
+            semanticVector,
+            organizationConfidence: organization.confidence,
             modified,
             isInitialized: true,
           }
@@ -750,6 +754,51 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       title: page.name,
       source: 'restore',
       content: nextContent as PersistedDocumentContent,
+    })
+    queuePersist(get())
+  },
+
+  applyPageOrganization: (id, indexedPath) => {
+    const { pages, workspaces } = get()
+    const page = pages.find(item => item.id === id)
+    if (!page) return
+
+    const plainText = plateDocumentToPlainText(contentStore[id] ?? emptyPlateDocument())
+    const organization = organizeDocument(
+      {
+        id,
+        name: page.name,
+        indexedPath,
+        content: plainText,
+      },
+      getWorkspaceDocuments(pages, page.workspaceId, id),
+    )
+    const relatedCollections = organization.relatedIds
+      .map(relatedId => pages.find(item => item.id === relatedId && item.workspaceId === page.workspaceId)?.indexedPath[0])
+      .filter((collection): collection is string => Boolean(collection))
+    const collections = [indexedPath[0], ...relatedCollections]
+      .filter((collection): collection is string => Boolean(collection))
+      .filter((collection, index, values) => values.indexOf(collection) === index)
+      .slice(0, 3)
+    const semanticVector = buildSemanticVector(page.name, plainText, collections)
+    const modified = new Date().toISOString()
+
+    set({
+      pages: pages.map(item => item.id === id
+        ? {
+            ...item,
+            indexedPath: [...indexedPath],
+            collections,
+            relatedIds: organization.relatedIds,
+            semanticVector,
+            organizationConfidence: Math.max(organization.confidence, 0.58),
+            modified,
+            isInitialized: true,
+          }
+        : item),
+      workspaces: workspaces.map(workspace =>
+        workspace.id === page.workspaceId ? { ...workspace, modified } : workspace,
+      ),
     })
     queuePersist(get())
   },

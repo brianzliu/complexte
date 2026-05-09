@@ -1,6 +1,7 @@
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { useDocumentStore } from '../store/useDocumentStore'
+import { organizeDocument } from '../lib/documentIntelligence'
 import Editor from '../components/Editor'
 import DocumentStarter from '../components/DocumentStarter'
 import RelationshipMap from '../components/RelationshipMap'
@@ -8,7 +9,18 @@ import RelationshipMap from '../components/RelationshipMap'
 export default function DocumentPage() {
   const navigate = useNavigate()
   const { id } = useParams({ strict: false }) as { id: string }
-  const { activeId, documentRevisions, openPage, pages, renamePage, restoreDocumentRevision, selectionAiActions, workspaces } = useDocumentStore()
+  const {
+    activeId,
+    applyPageOrganization,
+    documentRevisions,
+    getPageContent,
+    openPage,
+    pages,
+    renamePage,
+    restoreDocumentRevision,
+    selectionAiActions,
+    workspaces,
+  } = useDocumentStore()
   const [titleDraft, setTitleDraft] = useState('')
 
   useEffect(() => {
@@ -33,6 +45,27 @@ export default function DocumentPage() {
   const recentRevisions = page
     ? documentRevisions
         .filter(revision => revision.pageId === page.id)
+        .slice(0, 3)
+    : []
+  const organizationSuggestions = page
+    ? organizeDocument(
+        {
+          id: page.id,
+          name: page.name,
+          indexedPath: page.indexedPath,
+          content: getPageContent(page.id),
+        },
+        workspacePages
+          .filter(candidate => candidate.id !== page.id)
+          .map(candidate => ({
+            id: candidate.id,
+            name: candidate.name,
+            indexedPath: candidate.indexedPath,
+            semanticVector: candidate.semanticVector,
+            content: getPageContent(candidate.id),
+          })),
+      ).suggestions
+        .filter(suggestion => suggestion.indexedPath.join('/') !== page.indexedPath.join('/'))
         .slice(0, 3)
     : []
   const pathSegments = page
@@ -144,6 +177,30 @@ export default function DocumentPage() {
               </div>
             )}
           </div>
+
+          {organizationSuggestions.length > 0 && page.organizationConfidence < 0.75 && (
+            <div className="document-organization-panel">
+              <div className="document-organization-copy">
+                <span className="document-related-label">Placement Options</span>
+                <p>
+                  The agent is not fully confident about where this document belongs.
+                  Apply one of the stronger paths to keep the workspace organized.
+                </p>
+              </div>
+              <div className="document-organization-actions">
+                {organizationSuggestions.map(suggestion => (
+                  <button
+                    key={suggestion.indexedPath.join('/')}
+                    className="document-organization-option"
+                    onClick={() => applyPageOrganization(page.id, suggestion.indexedPath)}
+                  >
+                    <strong>{suggestion.label}</strong>
+                    <span>{suggestion.indexedPath.join(' / ')}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {recentAiActions.length > 0 && (
             <div className="document-ai-history">

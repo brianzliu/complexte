@@ -16,11 +16,18 @@ type RelatedDocument = WorkspaceDocument & {
   score: number
 }
 
+export type OrganizationSuggestion = {
+  label: string
+  indexedPath: string[]
+  score: number
+}
+
 type OrganizationResult = {
   indexedPath: string[]
   collections: string[]
   relatedIds: string[]
   confidence: number
+  suggestions: OrganizationSuggestion[]
 }
 
 const STOP_WORDS = new Set([
@@ -187,10 +194,12 @@ export function organizeDocument(
       const samePrimaryCollection = document.indexedPath[0] === candidate.path[0]
       return total + (samePrimaryCollection ? document.score * 0.35 : 0)
     }, 0)
+    const samePrimaryBoost = target.indexedPath[0] === candidate.path[0] ? 0.7 : 0
+    const samePathBoost = target.indexedPath.join('/') === candidate.path.join('/') ? 0.3 : 0
 
     return {
       candidate,
-      score: keywordScore + relatedBoost,
+      score: keywordScore + relatedBoost + samePrimaryBoost + samePathBoost,
     }
   }).sort((a, b) => b.score - a.score)
 
@@ -228,11 +237,20 @@ export function organizeDocument(
       + (Math.min(support / 1.2, 1) * 0.2),
     ),
   )
+  const suggestions = collectionScores
+    .filter(({ score }, index) => score > 0 || index < 3)
+    .slice(0, 3)
+    .map(({ candidate, score }) => ({
+      label: candidate.label,
+      indexedPath: candidate.path,
+      score,
+    }))
 
   return {
     indexedPath,
     collections,
     relatedIds: relatedDocuments.map(document => document.id),
     confidence,
+    suggestions,
   }
 }

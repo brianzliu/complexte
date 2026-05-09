@@ -1236,6 +1236,71 @@ input, textarea {
   background: color-mix(in srgb, var(--bg) 94%, var(--bg-raised));
 }
 
+.document-organization-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 28px;
+  border-bottom: 1px solid var(--border);
+  background:
+    radial-gradient(circle at top right, rgba(191, 219, 254, 0.08), transparent 28%),
+    color-mix(in srgb, var(--bg) 92%, var(--bg-raised));
+}
+
+.document-organization-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 520px;
+}
+
+.document-organization-copy p {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.document-organization-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.document-organization-option {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-hover);
+  color: var(--text-2);
+  text-align: left;
+  transition: background var(--fast), border-color var(--fast), color var(--fast), transform var(--fast);
+}
+
+.document-organization-option strong {
+  color: var(--text-1);
+  font-size: 11px;
+}
+
+.document-organization-option span {
+  font-size: 11.5px;
+}
+
+.document-organization-option:hover {
+  transform: translateY(-1px);
+  background: var(--bg-active);
+  border-color: var(--border-strong);
+  color: var(--text-1);
+}
+
 .document-ai-history-list {
   display: flex;
   align-items: center;
