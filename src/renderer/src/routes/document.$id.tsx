@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useDocumentStore } from '../store/useDocumentStore'
 import Editor from '../components/Editor'
 import DocumentStarter from '../components/DocumentStarter'
+import RelationshipMap from '../components/RelationshipMap'
 
 export default function DocumentPage() {
   const navigate = useNavigate()
@@ -16,6 +17,9 @@ export default function DocumentPage() {
 
   const page = pages.find(item => item.id === id)
   const workspace = page ? workspaces.find(item => item.id === page.workspaceId) : null
+  const workspacePages = page
+    ? pages.filter(item => item.workspaceId === page.workspaceId)
+    : []
   const relatedPages = page
     ? page.relatedIds
         .map(relatedId => pages.find(item => item.id === relatedId && item.workspaceId === page.workspaceId))
@@ -172,6 +176,12 @@ export default function DocumentPage() {
               </div>
             </div>
           )}
+
+          <RelationshipMap
+            page={page}
+            workspacePages={workspacePages}
+            onOpenPage={pageId => navigate({ to: '/document/$id', params: { id: pageId } })}
+          />
         </>
       )}
       {activeId === id && (
