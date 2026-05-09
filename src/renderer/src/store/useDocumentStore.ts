@@ -9,10 +9,10 @@ import {
 } from '../lib/plateDocument'
 import { loadPersistedSnapshot, savePersistedSnapshot } from '../lib/documentPersistence'
 import { organizeDocument } from '../lib/documentIntelligence'
-import type { PageMeta, PersistedDocumentContent, PersistedDocumentSnapshot, Workspace } from '../../../shared/documentSnapshot'
+import type { PageMeta, PersistedDocumentContent, PersistedDocumentSnapshot, PromptSession, Workspace } from '../../../shared/documentSnapshot'
 
 export type Theme = 'dark' | 'light' | 'auto'
-export type { PageMeta, Workspace } from '../../../shared/documentSnapshot'
+export type { PageMeta, PromptSession, Workspace } from '../../../shared/documentSnapshot'
 
 export interface AiSettings {
   openRouterApiKey: string
@@ -144,6 +144,7 @@ let contentStore: Record<string, PlateDocumentValue> = Object.fromEntries(
 )
 let pageCounter = INITIAL_PAGES.length
 let workspaceCounter = INITIAL_WORKSPACES.length
+let promptSessionCounter = 0
 let persistTimer: ReturnType<typeof setTimeout> | null = null
 let persistRequestId = 0
 
@@ -157,6 +158,10 @@ function generatePageId(name: string): string {
 
 function generateWorkspaceId(name: string): string {
   return `${slugify(name)}-${++workspaceCounter}`
+}
+
+function generatePromptSessionId(): string {
+  return `prompt-session-${++promptSessionCounter}`
 }
 
 function getWorkspaceDocuments(pages: PageMeta[], workspaceId: string, excludeId?: string) {
@@ -176,6 +181,7 @@ interface DocumentStore {
   pages: PageMeta[]
   activeId: string | null
   openTabIds: string[]
+  promptSessions: PromptSession[]
   content: PlateDocumentValue
   contentVersion: number
   isSidebarCollapsed: boolean
@@ -198,6 +204,7 @@ interface DocumentStore {
   toggleSidebar: () => void
   setTheme: (theme: Theme) => void
   setAiSettings: (settings: Partial<AiSettings>) => void
+  addPromptSession: (session: Omit<PromptSession, 'id' | 'createdAt'>) => void
   getPageContent: (id: string) => string
 }
 
@@ -230,7 +237,7 @@ function serializeContentRecord(source: Record<string, PlateDocumentValue>): Rec
 
 function buildSnapshot(state: Pick<
   DocumentStore,
-  'workspaces' | 'activeWorkspaceId' | 'pages' | 'activeId' | 'openTabIds'
+  'workspaces' | 'activeWorkspaceId' | 'pages' | 'activeId' | 'openTabIds' | 'promptSessions'
 >): PersistedDocumentSnapshot {
   return {
     version: 2,
@@ -239,6 +246,7 @@ function buildSnapshot(state: Pick<
     pages: clonePages(state.pages),
     activeId: state.activeId,
     openTabIds: [...state.openTabIds],
+    promptSessions: state.promptSessions.map(session => ({ ...session, relatedDocumentIds: [...session.relatedDocumentIds] })),
     contentById: serializeContentRecord(contentStore),
     pageCounter,
     workspaceCounter,
@@ -247,7 +255,7 @@ function buildSnapshot(state: Pick<
 
 function applySnapshot(snapshot: PersistedDocumentSnapshot): Pick<
   DocumentStore,
-  'workspaces' | 'activeWorkspaceId' | 'pages' | 'activeId' | 'openTabIds' | 'content' | 'contentVersion'
+  'workspaces' | 'activeWorkspaceId' | 'pages' | 'activeId' | 'openTabIds' | 'promptSessions' | 'content' | 'contentVersion'
 > {
   const normalizedPages = snapshot.pages.map(page => ({
     ...page,
@@ -265,6 +273,11 @@ function applySnapshot(snapshot: PersistedDocumentSnapshot): Pick<
     ? snapshot.activeId
     : null
   const openTabIds = snapshot.openTabIds.filter(id => pages.some(page => page.id === id))
+  const promptSessions = (snapshot.promptSessions ?? []).map(session => ({
+    ...session,
+    relatedDocumentIds: session.relatedDocumentIds ?? [],
+  }))
+  promptSessionCounter = promptSessions.length
 
   return {
     workspaces,
@@ -272,6 +285,7 @@ function applySnapshot(snapshot: PersistedDocumentSnapshot): Pick<
     pages,
     activeId,
     openTabIds,
+    promptSessions,
     content: clonePlateDocument(activeId ? contentStore[activeId] ?? emptyPlateDocument() : emptyPlateDocument()),
     contentVersion: Date.now(),
   }
@@ -311,6 +325,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   pages: clonePages(INITIAL_PAGES),
   activeId: null,
   openTabIds: [],
+  promptSessions: [],
   content: emptyPlateDocument(),
   contentVersion: 0,
   isSidebarCollapsed: false,
@@ -582,6 +597,21 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const nextSettings = { ...get().aiSettings, ...settings }
     try { localStorage.setItem('complexte-ai-settings', JSON.stringify(nextSettings)) } catch {}
     set({ aiSettings: nextSettings })
+  },
+
+  addPromptSession: session => {
+    set(state => ({
+      promptSessions: [
+        {
+          ...session,
+          id: generatePromptSessionId(),
+          createdAt: new Date().toISOString(),
+          relatedDocumentIds: [...session.relatedDocumentIds],
+        },
+        ...state.promptSessions,
+      ].slice(0, 40),
+    }))
+    queuePersist(get())
   },
 
   getPageContent: (id: string) => plateDocumentToMarkdown(contentStore[id] ?? emptyPlateDocument()),

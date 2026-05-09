@@ -1119,7 +1119,7 @@ input, textarea {
 .document-starter-copy {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 8px;
 }
 
 .document-starter-title {
@@ -1129,6 +1129,12 @@ input, textarea {
   font-weight: 650;
   letter-spacing: 0;
   color: var(--text-1);
+}
+
+.document-starter-subtitle {
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .prompt-composer {

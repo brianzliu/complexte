@@ -4,6 +4,15 @@ export interface Workspace {
   modified: string
 }
 
+export interface PromptSession {
+  id: string
+  workspaceId: string
+  pageId: string
+  prompt: string
+  createdAt: string
+  relatedDocumentIds: string[]
+}
+
 export interface PageMeta {
   id: string
   workspaceId: string
@@ -25,6 +34,7 @@ export interface PersistedDocumentSnapshot {
   pages: PageMeta[]
   activeId: string | null
   openTabIds: string[]
+  promptSessions: PromptSession[]
   contentById: Record<string, PersistedDocumentContent>
   pageCounter: number
   workspaceCounter: number

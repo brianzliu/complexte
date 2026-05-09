@@ -2,7 +2,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useDocumentStore } from '../store/useDocumentStore'
 
 export default function IndexPage() {
-  const { activeWorkspaceId, createPage, initializePage, pages, workspaces } = useDocumentStore()
+  const { activeWorkspaceId, createPage, initializePage, pages, promptSessions, workspaces } = useDocumentStore()
   const navigate = useNavigate()
   const activeWorkspace = workspaces.find(workspace => workspace.id === activeWorkspaceId)
 
@@ -20,6 +20,9 @@ export default function IndexPage() {
   const recentPages = pages
     .filter(page => page.workspaceId === activeWorkspaceId)
     .sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime())
+    .slice(0, 3)
+  const recentPrompts = promptSessions
+    .filter(session => session.workspaceId === activeWorkspaceId)
     .slice(0, 3)
 
   const greeting = () => {
@@ -66,6 +69,27 @@ export default function IndexPage() {
                     <polyline points="14 2 14 8 20 8" />
                   </svg>
                   <span>{page.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {recentPrompts.length > 0 && (
+          <div className="welcome-recent">
+            <p className="welcome-recent-label">Recent Prompts</p>
+            <div className="welcome-recent-list">
+              {recentPrompts.map(session => (
+                <button
+                  key={session.id}
+                  className="welcome-recent-item"
+                  onClick={() => navigate({ to: '/document/$id', params: { id: session.pageId } })}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 3v18" />
+                    <path d="M7 8h8a4 4 0 1 1 0 8H9" />
+                  </svg>
+                  <span>{session.prompt}</span>
                 </button>
               ))}
             </div>

@@ -43,7 +43,7 @@ function buildGenerationPrompt(
 }
 
 export default function DocumentStarter({ pageId }: { pageId: string }) {
-  const { aiSettings, getPageContent, initializePage, pages, setPageContent } = useDocumentStore()
+  const { addPromptSession, aiSettings, getPageContent, initializePage, pages, setPageContent } = useDocumentStore()
   const [prompt, setPrompt] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -128,6 +128,14 @@ export default function DocumentStarter({ pageId }: { pageId: string }) {
           },
         },
       )
+      if (page) {
+        addPromptSession({
+          workspaceId: page.workspaceId,
+          pageId,
+          prompt,
+          relatedDocumentIds: relatedDocuments.map(document => document.id),
+        })
+      }
       flushContent()
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not generate the document.'
@@ -146,6 +154,7 @@ export default function DocumentStarter({ pageId }: { pageId: string }) {
       <div className="document-starter-inner">
         <div className="document-starter-copy">
           <h2 className="document-starter-title">What are you thinking of?</h2>
+          <p className="document-starter-subtitle">Prompt first. The agent drafts against relevant workspace context, then you edit from there.</p>
         </div>
 
         <form className="prompt-composer" onSubmit={handleGenerate}>

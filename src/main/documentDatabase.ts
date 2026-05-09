@@ -4,7 +4,7 @@ import { createRequire } from 'node:module'
 import { app } from 'electron'
 import initSqlJs from 'sql.js'
 import type { Database, SqlJsStatic } from 'sql.js'
-import type { PageMeta, PersistedDocumentSnapshot, Workspace } from '../shared/documentSnapshot'
+import type { PageMeta, PersistedDocumentSnapshot, PromptSession, Workspace } from '../shared/documentSnapshot'
 
 const require = createRequire(import.meta.url)
 const sqlWasmPath = require.resolve('sql.js/dist/sql-wasm.wasm')
@@ -120,10 +120,15 @@ class DocumentDatabase {
         active_workspace_id TEXT NOT NULL,
         active_page_id TEXT,
         open_tab_ids TEXT NOT NULL,
+        prompt_sessions_json TEXT NOT NULL DEFAULT '[]',
         page_counter INTEGER NOT NULL,
         workspace_counter INTEGER NOT NULL
       );
     `)
+
+    if (!hasColumn(this.db, 'app_state', 'prompt_sessions_json')) {
+      this.db.run(`ALTER TABLE app_state ADD COLUMN prompt_sessions_json TEXT NOT NULL DEFAULT '[]';`)
+    }
   }
 
   async loadSnapshot(): Promise<PersistedDocumentSnapshot | null> {
@@ -158,6 +163,7 @@ class DocumentDatabase {
           active_workspace_id,
           active_page_id,
           open_tab_ids,
+          prompt_sessions_json,
           page_counter,
           workspace_counter
         FROM app_state
@@ -188,6 +194,7 @@ class DocumentDatabase {
     const contentById = Object.fromEntries(
       pageRows.map(row => [String(row.id ?? ''), parseJson<unknown[]>(row.content_json, [])]),
     )
+    const promptSessions = parseJson<PromptSession[]>(appState.prompt_sessions_json, [])
 
     return {
       version: 2,
@@ -196,6 +203,7 @@ class DocumentDatabase {
       pages,
       activeId: appState.active_page_id == null ? null : String(appState.active_page_id),
       openTabIds: parseJson<string[]>(appState.open_tab_ids, []),
+      promptSessions,
       contentById,
       pageCounter: Number(appState.page_counter ?? pages.length),
       workspaceCounter: Number(appState.workspace_counter ?? workspaces.length),
@@ -255,14 +263,16 @@ class DocumentDatabase {
             active_workspace_id,
             active_page_id,
             open_tab_ids,
+            prompt_sessions_json,
             page_counter,
             workspace_counter
-          ) VALUES (1, ?, ?, ?, ?, ?);
+          ) VALUES (1, ?, ?, ?, ?, ?, ?);
         `,
         [
           snapshot.activeWorkspaceId,
           snapshot.activeId,
           serializeJson(snapshot.openTabIds),
+          serializeJson(snapshot.promptSessions),
           snapshot.pageCounter,
           snapshot.workspaceCounter,
         ],
