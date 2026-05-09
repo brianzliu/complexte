@@ -3,6 +3,7 @@ type WorkspaceDocument = {
   name: string
   indexedPath: string[]
   content: string
+  semanticVector?: number[]
 }
 
 type CollectionCandidate = {
@@ -60,41 +61,84 @@ const COLLECTION_CANDIDATES: CollectionCandidate[] = [
   },
 ]
 
+const VECTOR_DIMENSIONS = 96
+
 export function tokenize(value: string): string[] {
   return (value.toLowerCase().match(/[a-z0-9]{3,}/g) ?? [])
     .filter(token => !STOP_WORDS.has(token))
 }
 
-export function scoreDocumentSimilarity(queryText: string, title: string, body: string): number {
+function hashToken(token: string): number {
+  let hash = 2166136261
+  for (let index = 0; index < token.length; index += 1) {
+    hash ^= token.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return Math.abs(hash >>> 0)
+}
+
+function normalizeVector(vector: number[]): number[] {
+  const magnitude = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0))
+  if (!magnitude) return vector
+  return vector.map(value => value / magnitude)
+}
+
+export function buildSemanticVector(title: string, body: string, collections: string[] = []): number[] {
+  const vector = new Array<number>(VECTOR_DIMENSIONS).fill(0)
+  const weightedTokens = [
+    ...tokenize(title).map(token => ({ token, weight: 3 })),
+    ...tokenize(body).map(token => ({ token, weight: 1 })),
+    ...collections.flatMap(collection => tokenize(collection).map(token => ({ token, weight: 2 }))),
+  ]
+
+  weightedTokens.forEach(({ token, weight }) => {
+    const hash = hashToken(token)
+    const index = hash % VECTOR_DIMENSIONS
+    const sign = hash % 2 === 0 ? 1 : -1
+    vector[index] += weight * sign
+  })
+
+  return normalizeVector(vector)
+}
+
+function cosineSimilarity(left: number[], right: number[]): number {
+  if (left.length === 0 || right.length === 0) return 0
+  const length = Math.min(left.length, right.length)
+  let dot = 0
+  for (let index = 0; index < length; index += 1) {
+    dot += left[index] * right[index]
+  }
+  return Math.max(0, dot)
+}
+
+export function scoreDocumentSimilarity(
+  queryText: string,
+  title: string,
+  body: string,
+  collections: string[] = [],
+  precomputedVector?: number[],
+): number {
   const promptTokens = tokenize(queryText)
   if (promptTokens.length === 0) return 0
 
+  const queryVector = buildSemanticVector(queryText, queryText)
+  const documentVector = precomputedVector && precomputedVector.length > 0
+    ? precomputedVector
+    : buildSemanticVector(title, body, collections)
   const titleTokens = tokenize(title)
-  const bodyTokens = tokenize(body)
-  const bodyTokenSet = new Set(bodyTokens)
   const titleTokenSet = new Set(titleTokens)
-
   let score = 0
   promptTokens.forEach(token => {
     if (titleTokenSet.has(token)) score += 4
-    if (bodyTokenSet.has(token)) score += 1
   })
 
-  return score / Math.sqrt(bodyTokens.length + titleTokens.length + 1)
+  return cosineSimilarity(queryVector, documentVector) + (score / Math.sqrt(titleTokens.length + 1)) * 0.08
 }
 
 function scoreCollectionFit(title: string, body: string, candidate: CollectionCandidate): number {
-  const textTokens = tokenize(`${title}\n${body}`)
-  if (textTokens.length === 0) return 0
-
-  const tokenSet = new Set(textTokens)
-  let score = 0
-
-  candidate.keywords.forEach(keyword => {
-    if (tokenSet.has(keyword.toLowerCase())) score += 3
-  })
-
-  return score
+  const candidateVector = buildSemanticVector(candidate.label, candidate.keywords.join(' '))
+  const documentVector = buildSemanticVector(title, body)
+  return cosineSimilarity(candidateVector, documentVector) * 10
 }
 
 export function findRelatedDocuments(
@@ -103,12 +147,21 @@ export function findRelatedDocuments(
   limit = 3,
 ): RelatedDocument[] {
   const queryText = `${target.name}\n${target.content}`
+  const targetVector = target.semanticVector && target.semanticVector.length > 0
+    ? target.semanticVector
+    : buildSemanticVector(target.name, target.content)
 
   return workspaceDocuments
     .filter(candidate => candidate.id !== target.id)
     .map(candidate => ({
       ...candidate,
-      score: scoreDocumentSimilarity(queryText, candidate.name, candidate.content),
+      score: scoreDocumentSimilarity(
+        queryText,
+        candidate.name,
+        candidate.content,
+        [],
+        candidate.semanticVector ?? buildSemanticVector(candidate.name, candidate.content),
+      ),
     }))
     .filter(candidate => candidate.score > 0)
     .sort((a, b) => b.score - a.score)

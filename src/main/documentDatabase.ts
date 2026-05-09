@@ -98,6 +98,7 @@ class DocumentDatabase {
         indexed_path TEXT NOT NULL,
         collections_json TEXT NOT NULL DEFAULT '[]',
         related_ids_json TEXT NOT NULL DEFAULT '[]',
+        semantic_vector_json TEXT NOT NULL DEFAULT '[]',
         modified TEXT NOT NULL,
         display_order INTEGER NOT NULL,
         is_initialized INTEGER NOT NULL,
@@ -112,6 +113,10 @@ class DocumentDatabase {
 
     if (!hasColumn(this.db, 'pages', 'related_ids_json')) {
       this.db.run(`ALTER TABLE pages ADD COLUMN related_ids_json TEXT NOT NULL DEFAULT '[]';`)
+    }
+
+    if (!hasColumn(this.db, 'pages', 'semantic_vector_json')) {
+      this.db.run(`ALTER TABLE pages ADD COLUMN semantic_vector_json TEXT NOT NULL DEFAULT '[]';`)
     }
 
     this.db.run(`
@@ -158,6 +163,7 @@ class DocumentDatabase {
           indexed_path,
           collections_json,
           related_ids_json,
+          semantic_vector_json,
           modified,
           display_order,
           is_initialized,
@@ -198,6 +204,7 @@ class DocumentDatabase {
       indexedPath: parseJson<string[]>(row.indexed_path, []),
       collections: parseJson<string[]>(row.collections_json, []),
       relatedIds: parseJson<string[]>(row.related_ids_json, []),
+      semanticVector: parseJson<number[]>(row.semantic_vector_json, []),
       modified: String(row.modified ?? new Date().toISOString()),
       order: Number(row.display_order ?? 0),
       isInitialized: Boolean(row.is_initialized),
@@ -211,7 +218,7 @@ class DocumentDatabase {
     const documentRevisions = parseJson<DocumentRevision[]>(appState.document_revisions_json, [])
 
     return {
-      version: 3,
+      version: 4,
       workspaces,
       activeWorkspaceId: String(appState.active_workspace_id ?? workspaces[0]?.id ?? ''),
       pages,
@@ -251,6 +258,7 @@ class DocumentDatabase {
               indexed_path,
               collections_json,
               related_ids_json,
+              semantic_vector_json,
               modified,
               display_order,
               is_initialized,
@@ -264,6 +272,7 @@ class DocumentDatabase {
             serializeJson(page.indexedPath),
             serializeJson(page.collections),
             serializeJson(page.relatedIds),
+            serializeJson(page.semanticVector),
             page.modified,
             page.order,
             page.isInitialized ? 1 : 0,

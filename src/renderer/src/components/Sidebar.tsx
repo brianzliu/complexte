@@ -136,6 +136,8 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
               `${searchQuery}\n${collectionsForPage.join(' ')}`,
               `${page.name} ${collectionsForPage.join(' ')}`,
               `${content}\n${page.indexedPath.join(' ')}`,
+              collectionsForPage,
+              page.semanticVector,
             )
 
             return {

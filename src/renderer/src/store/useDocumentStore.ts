@@ -8,7 +8,7 @@ import {
   type PlateDocumentValue,
 } from '../lib/plateDocument'
 import { loadPersistedSnapshot, savePersistedSnapshot } from '../lib/documentPersistence'
-import { organizeDocument } from '../lib/documentIntelligence'
+import { buildSemanticVector, organizeDocument } from '../lib/documentIntelligence'
 import type { DocumentRevision, PageMeta, PersistedDocumentContent, PersistedDocumentSnapshot, PromptSession, SelectionAiAction, Workspace } from '../../../shared/documentSnapshot'
 
 export type Theme = 'dark' | 'light' | 'auto'
@@ -130,13 +130,13 @@ const INITIAL_WORKSPACES: Workspace[] = [
 ]
 
 const INITIAL_PAGES: PageMeta[] = [
-  { id: 'getting-started', workspaceId: 'personal', name: 'Getting Started', indexedPath: ['Inbox'], collections: ['Inbox', 'Projects'], relatedIds: ['scratch'], modified: new Date(2026, 3, 11, 9, 0).toISOString(), order: 0, isInitialized: true },
-  { id: 'project-roadmap', workspaceId: 'personal', name: 'Project Roadmap', indexedPath: ['Projects', 'Roadmap'], collections: ['Projects', 'Design'], relatedIds: ['design-philosophy'], modified: new Date(2026, 3, 10, 14, 30).toISOString(), order: 1, isInitialized: true },
-  { id: 'meeting-notes', workspaceId: 'personal', name: 'Meeting Notes', indexedPath: ['Work', 'Meetings'], collections: ['Work', 'Projects'], relatedIds: ['project-roadmap'], modified: new Date(2026, 3, 11, 10, 15).toISOString(), order: 2, isInitialized: true },
-  { id: 'design-philosophy', workspaceId: 'personal', name: 'Design Philosophy', indexedPath: ['Projects', 'Design'], collections: ['Projects', 'Design'], relatedIds: ['project-roadmap'], modified: new Date(2026, 3, 8, 16, 0).toISOString(), order: 3, isInitialized: true },
-  { id: 'scratch', workspaceId: 'personal', name: 'Scratch Pad', indexedPath: ['Inbox'], collections: ['Inbox'], relatedIds: ['getting-started'], modified: new Date(2026, 3, 11, 8, 45).toISOString(), order: 4, isInitialized: true },
-  { id: 'research', workspaceId: 'client-work', name: 'Research', indexedPath: ['Research'], collections: ['Research'], relatedIds: ['drafts'], modified: new Date(2026, 3, 9, 11, 30).toISOString(), order: 0, isInitialized: true },
-  { id: 'drafts', workspaceId: 'client-work', name: 'Drafts', indexedPath: ['Writing', 'Drafts'], collections: ['Writing', 'Research'], relatedIds: ['research'], modified: new Date(2026, 3, 9, 12, 15).toISOString(), order: 1, isInitialized: true },
+  { id: 'getting-started', workspaceId: 'personal', name: 'Getting Started', indexedPath: ['Inbox'], collections: ['Inbox', 'Projects'], relatedIds: ['scratch'], semanticVector: buildSemanticVector('Getting Started', MOCK_CONTENT['getting-started'], ['Inbox', 'Projects']), modified: new Date(2026, 3, 11, 9, 0).toISOString(), order: 0, isInitialized: true },
+  { id: 'project-roadmap', workspaceId: 'personal', name: 'Project Roadmap', indexedPath: ['Projects', 'Roadmap'], collections: ['Projects', 'Design'], relatedIds: ['design-philosophy'], semanticVector: buildSemanticVector('Project Roadmap', MOCK_CONTENT['project-roadmap'], ['Projects', 'Design']), modified: new Date(2026, 3, 10, 14, 30).toISOString(), order: 1, isInitialized: true },
+  { id: 'meeting-notes', workspaceId: 'personal', name: 'Meeting Notes', indexedPath: ['Work', 'Meetings'], collections: ['Work', 'Projects'], relatedIds: ['project-roadmap'], semanticVector: buildSemanticVector('Meeting Notes', MOCK_CONTENT['meeting-notes'], ['Work', 'Projects']), modified: new Date(2026, 3, 11, 10, 15).toISOString(), order: 2, isInitialized: true },
+  { id: 'design-philosophy', workspaceId: 'personal', name: 'Design Philosophy', indexedPath: ['Projects', 'Design'], collections: ['Projects', 'Design'], relatedIds: ['project-roadmap'], semanticVector: buildSemanticVector('Design Philosophy', MOCK_CONTENT['design-philosophy'], ['Projects', 'Design']), modified: new Date(2026, 3, 8, 16, 0).toISOString(), order: 3, isInitialized: true },
+  { id: 'scratch', workspaceId: 'personal', name: 'Scratch Pad', indexedPath: ['Inbox'], collections: ['Inbox'], relatedIds: ['getting-started'], semanticVector: buildSemanticVector('Scratch Pad', MOCK_CONTENT['scratch'], ['Inbox']), modified: new Date(2026, 3, 11, 8, 45).toISOString(), order: 4, isInitialized: true },
+  { id: 'research', workspaceId: 'client-work', name: 'Research', indexedPath: ['Research'], collections: ['Research'], relatedIds: ['drafts'], semanticVector: buildSemanticVector('Research', MOCK_CONTENT['research'], ['Research']), modified: new Date(2026, 3, 9, 11, 30).toISOString(), order: 0, isInitialized: true },
+  { id: 'drafts', workspaceId: 'client-work', name: 'Drafts', indexedPath: ['Writing', 'Drafts'], collections: ['Writing', 'Research'], relatedIds: ['research'], semanticVector: buildSemanticVector('Drafts', MOCK_CONTENT['drafts'], ['Writing', 'Research']), modified: new Date(2026, 3, 9, 12, 15).toISOString(), order: 1, isInitialized: true },
 ]
 
 let contentStore: Record<string, PlateDocumentValue> = Object.fromEntries(
@@ -188,6 +188,7 @@ function getWorkspaceDocuments(pages: PageMeta[], workspaceId: string, excludeId
       id: page.id,
       name: page.name,
       indexedPath: page.indexedPath,
+      semanticVector: page.semanticVector,
       content: plateDocumentToPlainText(contentStore[page.id] ?? emptyPlateDocument()),
     }))
 }
@@ -240,6 +241,7 @@ function clonePages(pages: PageMeta[]): PageMeta[] {
     indexedPath: [...page.indexedPath],
     collections: [...page.collections],
     relatedIds: [...page.relatedIds],
+    semanticVector: [...page.semanticVector],
   }))
 }
 
@@ -288,6 +290,7 @@ function applySnapshot(snapshot: PersistedDocumentSnapshot): Pick<
     ...page,
     collections: page.collections ?? [],
     relatedIds: page.relatedIds ?? [],
+    semanticVector: page.semanticVector ?? [],
   }))
   contentStore = cloneContentRecord(snapshot.contentById)
   pageCounter = snapshot.pageCounter
@@ -453,6 +456,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       getWorkspaceDocuments(pages, page.workspaceId, id),
     )
     const value = markdownToPlateDocument(content)
+    const semanticVector = buildSemanticVector(options.name ?? page.name, content, organization.collections)
     contentStore[id] = value
 
     set({
@@ -465,6 +469,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
             indexedPath: organization.indexedPath,
             collections: organization.collections,
             relatedIds: organization.relatedIds,
+            semanticVector,
             modified,
             isInitialized: options.initialize ? true : item.isInitialized,
           }
@@ -507,6 +512,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       },
       getWorkspaceDocuments(pages, page.workspaceId, activeId),
     )
+    const semanticVector = buildSemanticVector(page.name, plainText, organization.collections)
     contentStore[activeId] = clonePlateDocument(content)
     set({
       pages: pages.map(item => item.id === activeId
@@ -515,6 +521,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
             indexedPath: organization.indexedPath,
             collections: organization.collections,
             relatedIds: organization.relatedIds,
+            semanticVector,
             modified,
             isInitialized: true,
           }
@@ -573,6 +580,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       indexedPath,
       collections: indexedPath.slice(0, 1),
       relatedIds: [],
+      semanticVector: buildSemanticVector(name, '', indexedPath.slice(0, 1)),
       modified: new Date().toISOString(),
       order: siblingCount,
       isInitialized: false,
@@ -622,6 +630,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
             indexedPath: organization.indexedPath,
             collections: organization.collections,
             relatedIds: organization.relatedIds,
+            semanticVector: buildSemanticVector(newName, plateDocumentToPlainText(contentStore[id] ?? emptyPlateDocument()), organization.collections),
             modified,
           }
         : page),
