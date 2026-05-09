@@ -49,6 +49,25 @@ export default function DocumentStarter({ pageId }: { pageId: string }) {
   const [isGenerating, setIsGenerating] = useState(false)
   const hasOpenRouterKey = aiSettings.openRouterApiKey.trim().length > 0
   const page = pages.find(item => item.id === pageId)
+  const relatedDocuments = useMemo(
+    () => (page && prompt.trim())
+      ? pages
+          .filter(candidate => candidate.workspaceId === page.workspaceId && candidate.id !== pageId)
+          .map(candidate => {
+            const content = getPageContent(candidate.id)
+            return {
+              id: candidate.id,
+              name: candidate.name,
+              excerpt: buildExcerpt(content, 180),
+              score: scoreDocumentSimilarity(prompt, candidate.name, content),
+            }
+          })
+          .filter(candidate => candidate.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 3)
+      : [],
+    [getPageContent, page, pageId, pages, prompt],
+  )
 
   const canGenerate = useMemo(
     () => prompt.trim().length > 0 && hasOpenRouterKey && !isGenerating,
@@ -90,23 +109,6 @@ export default function DocumentStarter({ pageId }: { pageId: string }) {
       flushTimer = setTimeout(flushContent, 120)
     }
 
-    const relatedDocuments = page
-      ? pages
-          .filter(candidate => candidate.workspaceId === page.workspaceId && candidate.id !== pageId)
-          .map(candidate => {
-            const content = getPageContent(candidate.id)
-            return {
-              name: candidate.name,
-              excerpt: buildExcerpt(content),
-              score: scoreDocumentSimilarity(prompt, candidate.name, content),
-            }
-          })
-          .filter(candidate => candidate.score > 0)
-          .sort((a, b) => b.score - a.score)
-          .slice(0, 3)
-          .map(({ name, excerpt }) => ({ name, excerpt }))
-      : []
-
     writeContent('')
 
     try {
@@ -114,7 +116,10 @@ export default function DocumentStarter({ pageId }: { pageId: string }) {
         {
           apiKey: aiSettings.openRouterApiKey,
           model: aiSettings.openRouterModel,
-          prompt: buildGenerationPrompt(prompt, relatedDocuments),
+          prompt: buildGenerationPrompt(
+            prompt,
+            relatedDocuments.map(({ name, excerpt }) => ({ name, excerpt })),
+          ),
         },
         {
           onDelta: (_delta, content) => {
@@ -182,9 +187,26 @@ export default function DocumentStarter({ pageId }: { pageId: string }) {
           </div>
         </form>
 
-        <p className="prompt-error" style={{ visibility: error ? 'hidden' : 'visible' }}>
-          New drafts pull in the most relevant documents from this workspace before generation.
-        </p>
+        {relatedDocuments.length > 0 ? (
+          <div className="prompt-context-panel">
+            <div className="prompt-context-header">
+              <span className="prompt-context-label">Will use related context</span>
+              <span className="prompt-context-count">{relatedDocuments.length} docs</span>
+            </div>
+            <div className="prompt-context-list">
+              {relatedDocuments.map(document => (
+                <div key={document.id} className="prompt-context-item">
+                  <div className="prompt-context-title">{document.name}</div>
+                  <div className="prompt-context-excerpt">{document.excerpt}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="prompt-error" style={{ visibility: error ? 'hidden' : 'visible' }}>
+            New drafts pull in the most relevant documents from this workspace before generation.
+          </p>
+        )}
         {error && <p className="prompt-error">{error}</p>}
       </div>
     </div>
