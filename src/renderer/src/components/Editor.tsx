@@ -161,7 +161,7 @@ function BubbleButton({
 
 function EditorFloatingControls() {
   const editor = useEditorRef()
-  const { aiSettings, content } = useDocumentStore()
+  const { activeId, addSelectionAiAction, aiSettings, content, pages } = useDocumentStore()
   const [selectionMenu, setSelectionMenu] = useState<MenuPosition | null>(null)
   const [slashMenu, setSlashMenu] = useState<MenuPosition | null>(null)
   const [applyMode, setApplyMode] = useState<'replace' | 'insert-below'>('replace')
@@ -333,6 +333,17 @@ function EditorFloatingControls() {
 
       if (!applied) {
         throw new Error('Could not apply the revision to the selected text.')
+      }
+
+      const activePage = activeId ? pages.find(page => page.id === activeId) : null
+      if (activePage) {
+        addSelectionAiAction({
+          workspaceId: activePage.workspaceId,
+          pageId: activePage.id,
+          instruction: aiPrompt,
+          selectionPreview: selectionTextRef.current.slice(0, 160),
+          applyMode,
+        })
       }
 
       closeMenus()

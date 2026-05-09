@@ -7,7 +7,7 @@ import DocumentStarter from '../components/DocumentStarter'
 export default function DocumentPage() {
   const navigate = useNavigate()
   const { id } = useParams({ strict: false }) as { id: string }
-  const { activeId, openPage, pages, workspaces } = useDocumentStore()
+  const { activeId, openPage, pages, selectionAiActions, workspaces } = useDocumentStore()
 
   useEffect(() => {
     openPage(id)
@@ -19,6 +19,11 @@ export default function DocumentPage() {
     ? page.relatedIds
         .map(relatedId => pages.find(item => item.id === relatedId && item.workspaceId === page.workspaceId))
         .filter((relatedPage): relatedPage is NonNullable<typeof relatedPage> => Boolean(relatedPage))
+    : []
+  const recentAiActions = page
+    ? selectionAiActions
+        .filter(action => action.pageId === page.id)
+        .slice(0, 3)
     : []
   const pathSegments = page
     ? [workspace?.name, ...page.indexedPath, page.name].filter(Boolean)
@@ -44,32 +49,48 @@ export default function DocumentPage() {
         </nav>
       </div>
       {page && (
-        <div className="document-context-strip">
-          <div className="document-collections">
-            {page.collections.map(collection => (
-              <span key={collection} className="document-collection-chip">
-                {collection}
-              </span>
-            ))}
+        <>
+          <div className="document-context-strip">
+            <div className="document-collections">
+              {page.collections.map(collection => (
+                <span key={collection} className="document-collection-chip">
+                  {collection}
+                </span>
+              ))}
+            </div>
+
+            {relatedPages.length > 0 && (
+              <div className="document-related-wrap">
+                <span className="document-related-label">Related</span>
+                <div className="document-related-list">
+                  {relatedPages.map(relatedPage => (
+                    <button
+                      key={relatedPage.id}
+                      className="document-related-pill"
+                      onClick={() => navigate({ to: '/document/$id', params: { id: relatedPage.id } })}
+                    >
+                      {relatedPage.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
-          {relatedPages.length > 0 && (
-            <div className="document-related-wrap">
-              <span className="document-related-label">Related</span>
-              <div className="document-related-list">
-                {relatedPages.map(relatedPage => (
-                  <button
-                    key={relatedPage.id}
-                    className="document-related-pill"
-                    onClick={() => navigate({ to: '/document/$id', params: { id: relatedPage.id } })}
-                  >
-                    {relatedPage.name}
-                  </button>
+          {recentAiActions.length > 0 && (
+            <div className="document-ai-history">
+              <span className="document-related-label">Recent AI Actions</span>
+              <div className="document-ai-history-list">
+                {recentAiActions.map(action => (
+                  <div key={action.id} className="document-ai-history-item">
+                    <strong>{action.applyMode === 'replace' ? 'Replace' : 'Insert below'}</strong>
+                    <span>{action.instruction}</span>
+                  </div>
                 ))}
               </div>
             </div>
           )}
-        </div>
+        </>
       )}
       {activeId === id && (
         page?.isInitialized ? <Editor key={id} /> : <DocumentStarter pageId={id} />

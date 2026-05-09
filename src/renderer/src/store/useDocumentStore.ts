@@ -9,10 +9,10 @@ import {
 } from '../lib/plateDocument'
 import { loadPersistedSnapshot, savePersistedSnapshot } from '../lib/documentPersistence'
 import { organizeDocument } from '../lib/documentIntelligence'
-import type { PageMeta, PersistedDocumentContent, PersistedDocumentSnapshot, PromptSession, Workspace } from '../../../shared/documentSnapshot'
+import type { PageMeta, PersistedDocumentContent, PersistedDocumentSnapshot, PromptSession, SelectionAiAction, Workspace } from '../../../shared/documentSnapshot'
 
 export type Theme = 'dark' | 'light' | 'auto'
-export type { PageMeta, PromptSession, Workspace } from '../../../shared/documentSnapshot'
+export type { PageMeta, PromptSession, SelectionAiAction, Workspace } from '../../../shared/documentSnapshot'
 
 export interface AiSettings {
   openRouterApiKey: string
@@ -145,6 +145,7 @@ let contentStore: Record<string, PlateDocumentValue> = Object.fromEntries(
 let pageCounter = INITIAL_PAGES.length
 let workspaceCounter = INITIAL_WORKSPACES.length
 let promptSessionCounter = 0
+let selectionAiActionCounter = 0
 let persistTimer: ReturnType<typeof setTimeout> | null = null
 let persistRequestId = 0
 
@@ -162,6 +163,10 @@ function generateWorkspaceId(name: string): string {
 
 function generatePromptSessionId(): string {
   return `prompt-session-${++promptSessionCounter}`
+}
+
+function generateSelectionAiActionId(): string {
+  return `selection-ai-action-${++selectionAiActionCounter}`
 }
 
 function getWorkspaceDocuments(pages: PageMeta[], workspaceId: string, excludeId?: string) {
@@ -182,6 +187,7 @@ interface DocumentStore {
   activeId: string | null
   openTabIds: string[]
   promptSessions: PromptSession[]
+  selectionAiActions: SelectionAiAction[]
   content: PlateDocumentValue
   contentVersion: number
   isSidebarCollapsed: boolean
@@ -205,6 +211,7 @@ interface DocumentStore {
   setTheme: (theme: Theme) => void
   setAiSettings: (settings: Partial<AiSettings>) => void
   addPromptSession: (session: Omit<PromptSession, 'id' | 'createdAt'>) => void
+  addSelectionAiAction: (action: Omit<SelectionAiAction, 'id' | 'createdAt'>) => void
   getPageContent: (id: string) => string
 }
 
@@ -237,7 +244,7 @@ function serializeContentRecord(source: Record<string, PlateDocumentValue>): Rec
 
 function buildSnapshot(state: Pick<
   DocumentStore,
-  'workspaces' | 'activeWorkspaceId' | 'pages' | 'activeId' | 'openTabIds' | 'promptSessions'
+  'workspaces' | 'activeWorkspaceId' | 'pages' | 'activeId' | 'openTabIds' | 'promptSessions' | 'selectionAiActions'
 >): PersistedDocumentSnapshot {
   return {
     version: 2,
@@ -247,6 +254,7 @@ function buildSnapshot(state: Pick<
     activeId: state.activeId,
     openTabIds: [...state.openTabIds],
     promptSessions: state.promptSessions.map(session => ({ ...session, relatedDocumentIds: [...session.relatedDocumentIds] })),
+    selectionAiActions: state.selectionAiActions.map(action => ({ ...action })),
     contentById: serializeContentRecord(contentStore),
     pageCounter,
     workspaceCounter,
@@ -255,7 +263,7 @@ function buildSnapshot(state: Pick<
 
 function applySnapshot(snapshot: PersistedDocumentSnapshot): Pick<
   DocumentStore,
-  'workspaces' | 'activeWorkspaceId' | 'pages' | 'activeId' | 'openTabIds' | 'promptSessions' | 'content' | 'contentVersion'
+  'workspaces' | 'activeWorkspaceId' | 'pages' | 'activeId' | 'openTabIds' | 'promptSessions' | 'selectionAiActions' | 'content' | 'contentVersion'
 > {
   const normalizedPages = snapshot.pages.map(page => ({
     ...page,
@@ -277,7 +285,9 @@ function applySnapshot(snapshot: PersistedDocumentSnapshot): Pick<
     ...session,
     relatedDocumentIds: session.relatedDocumentIds ?? [],
   }))
+  const selectionAiActions = (snapshot.selectionAiActions ?? []).map(action => ({ ...action }))
   promptSessionCounter = promptSessions.length
+  selectionAiActionCounter = selectionAiActions.length
 
   return {
     workspaces,
@@ -286,6 +296,7 @@ function applySnapshot(snapshot: PersistedDocumentSnapshot): Pick<
     activeId,
     openTabIds,
     promptSessions,
+    selectionAiActions,
     content: clonePlateDocument(activeId ? contentStore[activeId] ?? emptyPlateDocument() : emptyPlateDocument()),
     contentVersion: Date.now(),
   }
@@ -326,6 +337,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   activeId: null,
   openTabIds: [],
   promptSessions: [],
+  selectionAiActions: [],
   content: emptyPlateDocument(),
   contentVersion: 0,
   isSidebarCollapsed: false,
@@ -610,6 +622,20 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         },
         ...state.promptSessions,
       ].slice(0, 40),
+    }))
+    queuePersist(get())
+  },
+
+  addSelectionAiAction: action => {
+    set(state => ({
+      selectionAiActions: [
+        {
+          ...action,
+          id: generateSelectionAiActionId(),
+          createdAt: new Date().toISOString(),
+        },
+        ...state.selectionAiActions,
+      ].slice(0, 120),
     }))
     queuePersist(get())
   },

@@ -4,7 +4,7 @@ import { createRequire } from 'node:module'
 import { app } from 'electron'
 import initSqlJs from 'sql.js'
 import type { Database, SqlJsStatic } from 'sql.js'
-import type { PageMeta, PersistedDocumentSnapshot, PromptSession, Workspace } from '../shared/documentSnapshot'
+import type { PageMeta, PersistedDocumentSnapshot, PromptSession, SelectionAiAction, Workspace } from '../shared/documentSnapshot'
 
 const require = createRequire(import.meta.url)
 const sqlWasmPath = require.resolve('sql.js/dist/sql-wasm.wasm')
@@ -121,6 +121,7 @@ class DocumentDatabase {
         active_page_id TEXT,
         open_tab_ids TEXT NOT NULL,
         prompt_sessions_json TEXT NOT NULL DEFAULT '[]',
+        selection_ai_actions_json TEXT NOT NULL DEFAULT '[]',
         page_counter INTEGER NOT NULL,
         workspace_counter INTEGER NOT NULL
       );
@@ -128,6 +129,10 @@ class DocumentDatabase {
 
     if (!hasColumn(this.db, 'app_state', 'prompt_sessions_json')) {
       this.db.run(`ALTER TABLE app_state ADD COLUMN prompt_sessions_json TEXT NOT NULL DEFAULT '[]';`)
+    }
+
+    if (!hasColumn(this.db, 'app_state', 'selection_ai_actions_json')) {
+      this.db.run(`ALTER TABLE app_state ADD COLUMN selection_ai_actions_json TEXT NOT NULL DEFAULT '[]';`)
     }
   }
 
@@ -164,6 +169,7 @@ class DocumentDatabase {
           active_page_id,
           open_tab_ids,
           prompt_sessions_json,
+          selection_ai_actions_json,
           page_counter,
           workspace_counter
         FROM app_state
@@ -195,6 +201,7 @@ class DocumentDatabase {
       pageRows.map(row => [String(row.id ?? ''), parseJson<unknown[]>(row.content_json, [])]),
     )
     const promptSessions = parseJson<PromptSession[]>(appState.prompt_sessions_json, [])
+    const selectionAiActions = parseJson<SelectionAiAction[]>(appState.selection_ai_actions_json, [])
 
     return {
       version: 2,
@@ -204,6 +211,7 @@ class DocumentDatabase {
       activeId: appState.active_page_id == null ? null : String(appState.active_page_id),
       openTabIds: parseJson<string[]>(appState.open_tab_ids, []),
       promptSessions,
+      selectionAiActions,
       contentById,
       pageCounter: Number(appState.page_counter ?? pages.length),
       workspaceCounter: Number(appState.workspace_counter ?? workspaces.length),
@@ -264,15 +272,17 @@ class DocumentDatabase {
             active_page_id,
             open_tab_ids,
             prompt_sessions_json,
+            selection_ai_actions_json,
             page_counter,
             workspace_counter
-          ) VALUES (1, ?, ?, ?, ?, ?, ?);
+          ) VALUES (1, ?, ?, ?, ?, ?, ?, ?);
         `,
         [
           snapshot.activeWorkspaceId,
           snapshot.activeId,
           serializeJson(snapshot.openTabIds),
           serializeJson(snapshot.promptSessions),
+          serializeJson(snapshot.selectionAiActions),
           snapshot.pageCounter,
           snapshot.workspaceCounter,
         ],

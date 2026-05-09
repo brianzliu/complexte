@@ -13,6 +13,16 @@ export interface PromptSession {
   relatedDocumentIds: string[]
 }
 
+export interface SelectionAiAction {
+  id: string
+  workspaceId: string
+  pageId: string
+  instruction: string
+  selectionPreview: string
+  applyMode: 'replace' | 'insert-below'
+  createdAt: string
+}
+
 export interface PageMeta {
   id: string
   workspaceId: string
@@ -35,6 +45,7 @@ export interface PersistedDocumentSnapshot {
   activeId: string | null
   openTabIds: string[]
   promptSessions: PromptSession[]
+  selectionAiActions: SelectionAiAction[]
   contentById: Record<string, PersistedDocumentContent>
   pageCounter: number
   workspaceCounter: number
