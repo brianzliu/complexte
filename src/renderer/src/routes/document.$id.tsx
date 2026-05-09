@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from '@tanstack/react-router'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useDocumentStore } from '../store/useDocumentStore'
 import Editor from '../components/Editor'
 import DocumentStarter from '../components/DocumentStarter'
@@ -7,7 +7,8 @@ import DocumentStarter from '../components/DocumentStarter'
 export default function DocumentPage() {
   const navigate = useNavigate()
   const { id } = useParams({ strict: false }) as { id: string }
-  const { activeId, documentRevisions, openPage, pages, restoreDocumentRevision, selectionAiActions, workspaces } = useDocumentStore()
+  const { activeId, documentRevisions, openPage, pages, renamePage, restoreDocumentRevision, selectionAiActions, workspaces } = useDocumentStore()
+  const [titleDraft, setTitleDraft] = useState('')
 
   useEffect(() => {
     openPage(id)
@@ -34,6 +35,10 @@ export default function DocumentPage() {
     ? [workspace?.name, ...page.indexedPath, page.name].filter(Boolean)
     : ['Untitled']
 
+  useEffect(() => {
+    setTitleDraft(page?.name ?? '')
+  }, [page?.name])
+
   return (
     <div className="document-page">
       <div className="document-topbar">
@@ -55,6 +60,44 @@ export default function DocumentPage() {
       </div>
       {page && (
         <>
+          {page.isInitialized && (
+            <div className="document-title-shell">
+              <input
+                className="document-title-input"
+                type="text"
+                value={titleDraft}
+                onChange={event => setTitleDraft(event.target.value)}
+                onBlur={() => {
+                  const nextValue = titleDraft.trim()
+                  if (nextValue && nextValue !== page.name) {
+                    renamePage(page.id, nextValue)
+                  } else {
+                    setTitleDraft(page.name)
+                  }
+                }}
+                onKeyDown={event => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    event.currentTarget.blur()
+                  }
+                  if (event.key === 'Escape') {
+                    setTitleDraft(page.name)
+                    event.currentTarget.blur()
+                  }
+                }}
+                placeholder="Untitled"
+                spellCheck={false}
+              />
+              <div className="document-title-meta">
+                <span>{workspace?.name ?? 'Workspace'}</span>
+                <span className="document-title-dot" />
+                <span>{page.collections[0] || 'Unsorted'}</span>
+                <span className="document-title-dot" />
+                <span>{new Date(page.modified).toLocaleString()}</span>
+              </div>
+            </div>
+          )}
+
           <div className="document-context-strip">
             <div className="document-collections">
               {page.collections.map(collection => (
