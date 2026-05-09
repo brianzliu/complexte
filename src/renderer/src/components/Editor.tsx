@@ -164,6 +164,7 @@ function EditorFloatingControls() {
   const { aiSettings, content } = useDocumentStore()
   const [selectionMenu, setSelectionMenu] = useState<MenuPosition | null>(null)
   const [slashMenu, setSlashMenu] = useState<MenuPosition | null>(null)
+  const [applyMode, setApplyMode] = useState<'replace' | 'insert-below'>('replace')
   const [aiPrompt, setAiPrompt] = useState('')
   const [aiError, setAiError] = useState<string | null>(null)
   const [isRevisingSelection, setIsRevisingSelection] = useState(false)
@@ -203,6 +204,7 @@ function EditorFloatingControls() {
   const closeMenus = useCallback(() => {
     setSelectionMenu(null)
     setSlashMenu(null)
+    setApplyMode('replace')
     setAiPrompt('')
     setAiError(null)
     setIsBubbleInteracting(false)
@@ -276,6 +278,27 @@ function EditorFloatingControls() {
     return true
   }, [])
 
+  const insertBelowSelection = useCallback((nextText: string) => {
+    const range = selectionRangeRef.current
+    const selection = window.getSelection()
+    if (!range || !selection) return false
+
+    selection.removeAllRanges()
+    selection.addRange(range)
+    range.collapse(false)
+
+    const inserted = document.execCommand('insertText', false, `\n${nextText}`)
+    if (inserted) return true
+
+    const textNode = document.createTextNode(`\n${nextText}`)
+    range.insertNode(textNode)
+    range.setStartAfter(textNode)
+    range.collapse(true)
+    selection.removeAllRanges()
+    selection.addRange(range)
+    return true
+  }, [])
+
   const handleAiSubmit = async () => {
     if (!aiSettings.openRouterApiKey.trim()) {
       setAiError('Add your OpenRouter key in Settings first.')
@@ -304,7 +327,11 @@ function EditorFloatingControls() {
         documentContext: plateDocumentToPlainText(content),
       })
 
-      if (!replaceSelectedText(result)) {
+      const applied = applyMode === 'replace'
+        ? replaceSelectedText(result)
+        : insertBelowSelection(result)
+
+      if (!applied) {
         throw new Error('Could not apply the revision to the selected text.')
       }
 
@@ -383,21 +410,39 @@ function EditorFloatingControls() {
             }}
             onMouseDown={() => setIsBubbleInteracting(true)}
           >
-            <input
-              className="bubble-ai-input"
-              type="text"
-              value={aiPrompt}
-              onChange={event => setAiPrompt(event.target.value)}
-              placeholder="Ask AI how to revise this selection..."
-              disabled={isRevisingSelection}
-            />
-            <button
-              type="submit"
-              className="bubble-ai-submit"
-              disabled={isRevisingSelection}
-            >
-              {isRevisingSelection ? '...' : 'Ask'}
-            </button>
+            <div className="bubble-ai-mode-row">
+              <button
+                type="button"
+                className={`bubble-ai-mode-btn ${applyMode === 'replace' ? 'active' : ''}`}
+                onClick={() => setApplyMode('replace')}
+              >
+                Replace
+              </button>
+              <button
+                type="button"
+                className={`bubble-ai-mode-btn ${applyMode === 'insert-below' ? 'active' : ''}`}
+                onClick={() => setApplyMode('insert-below')}
+              >
+                Insert below
+              </button>
+            </div>
+            <div className="bubble-ai-input-row">
+              <input
+                className="bubble-ai-input"
+                type="text"
+                value={aiPrompt}
+                onChange={event => setAiPrompt(event.target.value)}
+                placeholder="Ask AI how to revise this selection..."
+                disabled={isRevisingSelection}
+              />
+              <button
+                type="submit"
+                className="bubble-ai-submit"
+                disabled={isRevisingSelection}
+              >
+                {isRevisingSelection ? '...' : 'Ask'}
+              </button>
+            </div>
           </form>
 
           {aiError && <p className="bubble-ai-error">{aiError}</p>}
