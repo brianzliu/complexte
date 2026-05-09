@@ -927,6 +927,64 @@ input, textarea {
   color: var(--text-1);
 }
 
+.document-context-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 44px;
+  padding: 0 28px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 90%, var(--bg-raised));
+}
+
+.document-collections,
+.document-related-list {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.document-collection-chip,
+.document-related-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.document-related-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.document-related-label {
+  color: var(--text-3);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.document-related-pill {
+  transition: background var(--fast), color var(--fast), border-color var(--fast);
+}
+
+.document-related-pill:hover {
+  background: var(--bg-active);
+  border-color: var(--border-strong);
+  color: var(--text-1);
+}
+
 /* New document starter */
 .document-starter {
   flex: 1;

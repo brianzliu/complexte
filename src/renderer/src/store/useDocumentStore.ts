@@ -8,6 +8,7 @@ import {
   type PlateDocumentValue,
 } from '../lib/plateDocument'
 import { loadPersistedSnapshot, savePersistedSnapshot } from '../lib/documentPersistence'
+import { organizeDocument } from '../lib/documentIntelligence'
 import type { PageMeta, PersistedDocumentContent, PersistedDocumentSnapshot, Workspace } from '../../../shared/documentSnapshot'
 
 export type Theme = 'dark' | 'light' | 'auto'
@@ -158,40 +159,15 @@ function generateWorkspaceId(name: string): string {
   return `${slugify(name)}-${++workspaceCounter}`
 }
 
-function inferIndexedPath(name: string, content: string, workspacePages: PageMeta[]): string[] {
-  const text = `${name}\n${content}`.toLowerCase()
-  const existingTopLevel = new Set(workspacePages.map(page => page.indexedPath[0]).filter(Boolean))
-
-  if (/\b(homework|assignment|problem set|calculus|integral|math|algebra|geometry|class|course)\b/.test(text)) {
-    if (/\b(calculus|integral|derivative|algebra|geometry|math)\b/.test(text)) {
-      return /\b(homework|assignment|problem set)\b/.test(text)
-        ? ['Classes', 'Math', 'Homework']
-        : ['Classes', 'Math', 'Notes']
-    }
-    return ['Classes', 'Notes']
-  }
-
-  if (/\b(meeting|agenda|attendees|action items?|standup|review)\b/.test(text)) {
-    return ['Work', 'Meetings']
-  }
-
-  if (/\b(roadmap|milestone|q[1-4]|project|upcoming|in progress)\b/.test(text)) {
-    return ['Projects', 'Roadmap']
-  }
-
-  if (/\b(design|interface|typography|layout|principles?|aesthetic)\b/.test(text)) {
-    return ['Projects', 'Design']
-  }
-
-  if (/\b(research|source|study|paper|question|hypothesis)\b/.test(text)) {
-    return ['Research']
-  }
-
-  if (/\b(draft|outline|essay|article|post)\b/.test(text)) {
-    return ['Writing', 'Drafts']
-  }
-
-  return existingTopLevel.has('Inbox') ? ['Inbox'] : ['Unsorted']
+function getWorkspaceDocuments(pages: PageMeta[], workspaceId: string, excludeId?: string) {
+  return pages
+    .filter(page => page.workspaceId === workspaceId && page.id !== excludeId)
+    .map(page => ({
+      id: page.id,
+      name: page.name,
+      indexedPath: page.indexedPath,
+      content: plateDocumentToPlainText(contentStore[page.id] ?? emptyPlateDocument()),
+    }))
 }
 
 interface DocumentStore {
@@ -407,8 +383,15 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (!page) return
 
     const modified = new Date().toISOString()
-    const workspacePages = pages.filter(item => item.workspaceId === page.workspaceId)
-    const indexedPath = inferIndexedPath(options.name ?? page.name, content, workspacePages)
+    const indexedPath = organizeDocument(
+      {
+        id,
+        name: options.name ?? page.name,
+        indexedPath: page.indexedPath,
+        content,
+      },
+      getWorkspaceDocuments(pages, page.workspaceId, id),
+    ).indexedPath
     const value = markdownToPlateDocument(content)
     contentStore[id] = value
 
@@ -452,9 +435,16 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (!page) return
 
     const modified = new Date().toISOString()
-    const workspacePages = pages.filter(item => item.workspaceId === page.workspaceId)
     const plainText = plateDocumentToPlainText(content)
-    const indexedPath = inferIndexedPath(page.name, plainText, workspacePages)
+    const indexedPath = organizeDocument(
+      {
+        id: activeId,
+        name: page.name,
+        indexedPath: page.indexedPath,
+        content: plainText,
+      },
+      getWorkspaceDocuments(pages, page.workspaceId, activeId),
+    ).indexedPath
     contentStore[activeId] = clonePlateDocument(content)
     set({
       pages: pages.map(item => item.id === activeId ? { ...item, indexedPath, modified, isInitialized: true } : item),
@@ -533,9 +523,16 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const modified = new Date().toISOString()
     const { pages } = get()
     const page = pages.find(item => item.id === id)
-    const workspacePages = page ? pages.filter(item => item.workspaceId === page.workspaceId) : []
     const indexedPath = page
-      ? inferIndexedPath(newName, plateDocumentToPlainText(contentStore[id] ?? emptyPlateDocument()), workspacePages)
+      ? organizeDocument(
+          {
+            id,
+            name: newName,
+            indexedPath: page.indexedPath,
+            content: plateDocumentToPlainText(contentStore[id] ?? emptyPlateDocument()),
+          },
+          getWorkspaceDocuments(pages, page.workspaceId, id),
+        ).indexedPath
       : ['Inbox']
     set(state => ({
       pages: state.pages.map(page => page.id === id ? { ...page, name: newName, indexedPath, modified } : page),

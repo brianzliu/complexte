@@ -1,12 +1,7 @@
 import { FormEvent, useMemo, useState } from 'react'
 import { streamDocument } from '../lib/openRouter'
+import { buildExcerpt, scoreDocumentSimilarity } from '../lib/documentIntelligence'
 import { useDocumentStore } from '../store/useDocumentStore'
-
-const STOP_WORDS = new Set([
-  'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from', 'how', 'i',
-  'in', 'is', 'it', 'of', 'on', 'or', 'that', 'the', 'this', 'to', 'was', 'we',
-  'with', 'you', 'your',
-])
 
 function deriveTitle(markdown: string, fallback: string): string {
   const heading = markdown
@@ -24,36 +19,6 @@ function deriveTitle(markdown: string, fallback: string): string {
     .join(' ')
 
   return promptTitle || 'Untitled'
-}
-
-function tokenize(value: string): string[] {
-  return (value.toLowerCase().match(/[a-z0-9]{3,}/g) ?? [])
-    .filter(token => !STOP_WORDS.has(token))
-}
-
-function scoreSimilarity(prompt: string, title: string, body: string): number {
-  const promptTokens = tokenize(prompt)
-  if (promptTokens.length === 0) return 0
-
-  const titleTokens = tokenize(title)
-  const bodyTokens = tokenize(body)
-  const bodyTokenSet = new Set(bodyTokens)
-  const titleTokenSet = new Set(titleTokens)
-
-  let score = 0
-  promptTokens.forEach(token => {
-    if (titleTokenSet.has(token)) score += 4
-    if (bodyTokenSet.has(token)) score += 1
-  })
-
-  return score / Math.sqrt(bodyTokens.length + titleTokens.length + 1)
-}
-
-function buildExcerpt(body: string): string {
-  return body
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 550)
 }
 
 function buildGenerationPrompt(
@@ -133,7 +98,7 @@ export default function DocumentStarter({ pageId }: { pageId: string }) {
             return {
               name: candidate.name,
               excerpt: buildExcerpt(content),
-              score: scoreSimilarity(prompt, candidate.name, content),
+              score: scoreDocumentSimilarity(prompt, candidate.name, content),
             }
           })
           .filter(candidate => candidate.score > 0)
