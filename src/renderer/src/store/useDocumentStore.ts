@@ -7,8 +7,11 @@ import {
   plateDocumentToPlainText,
   type PlateDocumentValue,
 } from '../lib/plateDocument'
+import { loadPersistedSnapshot, savePersistedSnapshot } from '../lib/documentPersistence'
+import type { PageMeta, PersistedDocumentContent, PersistedDocumentSnapshot, Workspace } from '../../../shared/documentSnapshot'
 
 export type Theme = 'dark' | 'light' | 'auto'
+export type { PageMeta, Workspace } from '../../../shared/documentSnapshot'
 
 export interface AiSettings {
   openRouterApiKey: string
@@ -39,22 +42,6 @@ function loadAiSettings(): AiSettings {
     openRouterApiKey: '',
     openRouterModel: 'openai/gpt-5.2',
   }
-}
-
-export interface Workspace {
-  id: string
-  name: string
-  modified: string
-}
-
-export interface PageMeta {
-  id: string
-  workspaceId: string
-  name: string
-  indexedPath: string[]
-  modified: string
-  order: number
-  isInitialized: boolean
 }
 
 const MOCK_CONTENT: Record<string, string> = {
@@ -156,6 +143,8 @@ let contentStore: Record<string, PlateDocumentValue> = Object.fromEntries(
 )
 let pageCounter = INITIAL_PAGES.length
 let workspaceCounter = INITIAL_WORKSPACES.length
+let persistTimer: ReturnType<typeof setTimeout> | null = null
+let persistRequestId = 0
 
 function slugify(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'untitled'
@@ -214,9 +203,11 @@ interface DocumentStore {
   content: PlateDocumentValue
   contentVersion: number
   isSidebarCollapsed: boolean
+  isHydrated: boolean
   theme: Theme
   aiSettings: AiSettings
 
+  hydrateFromPersistence: () => Promise<void>
   openPage: (id: string) => void
   closeTab: (id: string) => string | null
   setContent: (content: PlateDocumentValue) => void
@@ -234,17 +225,133 @@ interface DocumentStore {
   getPageContent: (id: string) => string
 }
 
+function cloneWorkspaces(workspaces: Workspace[]): Workspace[] {
+  return workspaces.map(workspace => ({ ...workspace }))
+}
+
+function clonePages(pages: PageMeta[]): PageMeta[] {
+  return pages.map(page => ({
+    ...page,
+    indexedPath: [...page.indexedPath],
+  }))
+}
+
+function cloneContentRecord(
+  source: Record<string, PersistedDocumentContent | PlateDocumentValue>,
+): Record<string, PlateDocumentValue> {
+  return Object.fromEntries(
+    Object.entries(source).map(([id, value]) => [id, clonePlateDocument(value as PlateDocumentValue)]),
+  )
+}
+
+function serializeContentRecord(source: Record<string, PlateDocumentValue>): Record<string, PersistedDocumentContent> {
+  return Object.fromEntries(
+    Object.entries(source).map(([id, value]) => [id, clonePlateDocument(value) as PersistedDocumentContent]),
+  )
+}
+
+function buildSnapshot(state: Pick<
+  DocumentStore,
+  'workspaces' | 'activeWorkspaceId' | 'pages' | 'activeId' | 'openTabIds'
+>): PersistedDocumentSnapshot {
+  return {
+    version: 1,
+    workspaces: cloneWorkspaces(state.workspaces),
+    activeWorkspaceId: state.activeWorkspaceId,
+    pages: clonePages(state.pages),
+    activeId: state.activeId,
+    openTabIds: [...state.openTabIds],
+    contentById: serializeContentRecord(contentStore),
+    pageCounter,
+    workspaceCounter,
+  }
+}
+
+function applySnapshot(snapshot: PersistedDocumentSnapshot): Pick<
+  DocumentStore,
+  'workspaces' | 'activeWorkspaceId' | 'pages' | 'activeId' | 'openTabIds' | 'content' | 'contentVersion'
+> {
+  contentStore = cloneContentRecord(snapshot.contentById)
+  pageCounter = snapshot.pageCounter
+  workspaceCounter = snapshot.workspaceCounter
+
+  const workspaces = cloneWorkspaces(snapshot.workspaces)
+  const pages = clonePages(snapshot.pages)
+  const activeWorkspaceId = snapshot.activeWorkspaceId || workspaces[0]?.id || ''
+  const activeId = snapshot.activeId && pages.some(page => page.id === snapshot.activeId)
+    ? snapshot.activeId
+    : null
+  const openTabIds = snapshot.openTabIds.filter(id => pages.some(page => page.id === id))
+
+  return {
+    workspaces,
+    activeWorkspaceId,
+    pages,
+    activeId,
+    openTabIds,
+    content: clonePlateDocument(activeId ? contentStore[activeId] ?? emptyPlateDocument() : emptyPlateDocument()),
+    contentVersion: Date.now(),
+  }
+}
+
+async function flushPersistedSnapshot(snapshot: PersistedDocumentSnapshot): Promise<void> {
+  const requestId = ++persistRequestId
+  await savePersistedSnapshot(snapshot)
+  if (persistRequestId !== requestId) {
+    await savePersistedSnapshot(buildSnapshot(useDocumentStore.getState()))
+  }
+}
+
+function queuePersist(state: DocumentStore, immediate = false): void {
+  if (!state.isHydrated) return
+
+  const snapshot = buildSnapshot(state)
+  if (persistTimer) {
+    clearTimeout(persistTimer)
+    persistTimer = null
+  }
+
+  if (immediate) {
+    void flushPersistedSnapshot(snapshot)
+    return
+  }
+
+  persistTimer = setTimeout(() => {
+    persistTimer = null
+    void flushPersistedSnapshot(snapshot)
+  }, 180)
+}
+
 export const useDocumentStore = create<DocumentStore>((set, get) => ({
-  workspaces: INITIAL_WORKSPACES,
+  workspaces: cloneWorkspaces(INITIAL_WORKSPACES),
   activeWorkspaceId: INITIAL_WORKSPACES[0].id,
-  pages: INITIAL_PAGES,
+  pages: clonePages(INITIAL_PAGES),
   activeId: null,
   openTabIds: [],
   content: emptyPlateDocument(),
   contentVersion: 0,
   isSidebarCollapsed: false,
+  isHydrated: false,
   theme: loadTheme(),
   aiSettings: loadAiSettings(),
+
+  hydrateFromPersistence: async () => {
+    try {
+      const snapshot = await loadPersistedSnapshot()
+      if (snapshot) {
+        set(() => ({
+          ...applySnapshot(snapshot),
+          isHydrated: true,
+        }))
+        return
+      }
+
+      set({ isHydrated: true })
+      queuePersist(useDocumentStore.getState(), true)
+    } catch {
+      set({ isHydrated: true })
+    }
+  },
 
   openPage: (id: string) => {
     const page = get().pages.find(item => item.id === id)
@@ -256,6 +363,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       content: clonePlateDocument(contentStore[id] ?? emptyPlateDocument()),
       contentVersion: get().contentVersion + 1,
     })
+    queuePersist(get())
   },
 
   closeTab: (id: string) => {
@@ -279,6 +387,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         : content,
       contentVersion: isClosingActiveTab ? get().contentVersion + 1 : get().contentVersion,
     })
+    queuePersist(get())
 
     return nextActiveId
   },
@@ -320,6 +429,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         workspace.id === page.workspaceId ? { ...workspace, modified } : workspace,
       ),
     })
+    queuePersist(get())
   },
 
   initializePage: (id: string) => {
@@ -331,6 +441,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         return page?.workspaceId === workspace.id ? { ...workspace, modified } : workspace
       }),
     }))
+    queuePersist(get())
   },
 
   saveDocument: () => {
@@ -351,6 +462,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         workspace.id === page.workspaceId ? { ...workspace, modified } : workspace,
       ),
     })
+    queuePersist(get())
   },
 
   createWorkspace: (name: string) => {
@@ -366,6 +478,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       content: emptyPlateDocument(),
       contentVersion: state.contentVersion + 1,
     }))
+    queuePersist(get())
     return workspace
   },
 
@@ -378,6 +491,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       content: emptyPlateDocument(),
       contentVersion: state.contentVersion + 1,
     }))
+    queuePersist(get())
   },
 
   createPage: (name: string, indexedPath = ['Inbox']) => {
@@ -398,6 +512,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       pages: [...state.pages, page],
       openTabIds: [...state.openTabIds, id],
     }))
+    queuePersist(get())
     return page
   },
 
@@ -411,6 +526,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       content: activeId === id ? emptyPlateDocument() : state.content,
       contentVersion: activeId === id ? state.contentVersion + 1 : state.contentVersion,
     }))
+    queuePersist(get())
   },
 
   renamePage: (id: string, newName: string) => {
@@ -424,6 +540,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set(state => ({
       pages: state.pages.map(page => page.id === id ? { ...page, name: newName, indexedPath, modified } : page),
     }))
+    queuePersist(get())
   },
 
   toggleSidebar: () => {

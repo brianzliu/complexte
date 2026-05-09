@@ -6,6 +6,7 @@ import {
   type GenerateDocumentResponse,
   type GenerateDocumentStreamCallbacks,
 } from '../shared/openRouterDocument'
+import type { PersistedDocumentSnapshot } from '../shared/documentSnapshot'
 
 function isMissingOpenRouterHandler(error: unknown): boolean {
   return error instanceof Error && /No handler registered for 'openrouter:generate-document'/.test(error.message)
@@ -26,6 +27,11 @@ contextBridge.exposeInMainWorld('openRouter', {
   generateDocument,
   streamDocument: (request: GenerateDocumentRequest, callbacks?: GenerateDocumentStreamCallbacks) =>
     generateOpenRouterDocumentStream(request, callbacks),
+})
+
+contextBridge.exposeInMainWorld('documentPersistence', {
+  loadSnapshot: () => ipcRenderer.invoke('documents:load-snapshot') as Promise<PersistedDocumentSnapshot | null>,
+  saveSnapshot: (snapshot: PersistedDocumentSnapshot) => ipcRenderer.invoke('documents:save-snapshot', snapshot),
 })
 
 contextBridge.exposeInMainWorld('appShortcuts', {

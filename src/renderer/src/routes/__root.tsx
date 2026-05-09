@@ -6,8 +6,23 @@ import Sidebar from '../components/Sidebar'
 import TabBar from '../components/TabBar'
 
 export default function Root() {
-  const { activeId, activeWorkspaceId, closeTab, isSidebarCollapsed, toggleSidebar, createPage, pages, theme } = useDocumentStore()
+  const {
+    activeId,
+    activeWorkspaceId,
+    closeTab,
+    createPage,
+    hydrateFromPersistence,
+    isHydrated,
+    isSidebarCollapsed,
+    pages,
+    theme,
+    toggleSidebar,
+  } = useDocumentStore()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    void hydrateFromPersistence()
+  }, [hydrateFromPersistence])
 
   useEffect(() => {
     const applyTheme = (t: typeof theme) => {
@@ -86,6 +101,20 @@ export default function Root() {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [handleCloseActiveTab, handleNewPage, handleNewPageInCurrentFolder, toggleSidebar])
+
+  if (!isHydrated) {
+    return (
+      <div className="app-layout">
+        <main className="main-content">
+          <div className="welcome-page">
+            <div className="welcome-inner">
+              <p className="welcome-sub">Loading workspace...</p>
+            </div>
+          </div>
+        </main>
+      </div>
+    )
+  }
 
   return (
     <div className={`app-layout ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
