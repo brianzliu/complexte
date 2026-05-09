@@ -94,6 +94,22 @@ export default function DocumentPage() {
                 <span>{page.collections[0] || 'Unsorted'}</span>
                 <span className="document-title-dot" />
                 <span>{new Date(page.modified).toLocaleString()}</span>
+                <span className="document-title-dot" />
+                <span
+                  className={`document-confidence-pill ${
+                    page.organizationConfidence >= 0.75
+                      ? 'high'
+                      : page.organizationConfidence >= 0.45
+                        ? 'medium'
+                        : 'low'
+                  }`}
+                >
+                  {page.organizationConfidence >= 0.75
+                    ? 'High confidence'
+                    : page.organizationConfidence >= 0.45
+                      ? 'Review placement'
+                      : 'Low confidence'}
+                </span>
               </div>
             </div>
           )}

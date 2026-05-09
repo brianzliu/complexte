@@ -42,6 +42,7 @@ export interface PageMeta {
   collections: string[]
   relatedIds: string[]
   semanticVector: number[]
+  organizationConfidence: number
   modified: string
   order: number
   isInitialized: boolean
@@ -50,7 +51,7 @@ export interface PageMeta {
 export type PersistedDocumentContent = unknown[]
 
 export interface PersistedDocumentSnapshot {
-  version: 4
+  version: 5
   workspaces: Workspace[]
   activeWorkspaceId: string
   pages: PageMeta[]

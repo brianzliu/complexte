@@ -99,6 +99,7 @@ class DocumentDatabase {
         collections_json TEXT NOT NULL DEFAULT '[]',
         related_ids_json TEXT NOT NULL DEFAULT '[]',
         semantic_vector_json TEXT NOT NULL DEFAULT '[]',
+        organization_confidence REAL NOT NULL DEFAULT 0,
         modified TEXT NOT NULL,
         display_order INTEGER NOT NULL,
         is_initialized INTEGER NOT NULL,
@@ -117,6 +118,10 @@ class DocumentDatabase {
 
     if (!hasColumn(this.db, 'pages', 'semantic_vector_json')) {
       this.db.run(`ALTER TABLE pages ADD COLUMN semantic_vector_json TEXT NOT NULL DEFAULT '[]';`)
+    }
+
+    if (!hasColumn(this.db, 'pages', 'organization_confidence')) {
+      this.db.run(`ALTER TABLE pages ADD COLUMN organization_confidence REAL NOT NULL DEFAULT 0;`)
     }
 
     this.db.run(`
@@ -164,6 +169,7 @@ class DocumentDatabase {
           collections_json,
           related_ids_json,
           semantic_vector_json,
+          organization_confidence,
           modified,
           display_order,
           is_initialized,
@@ -205,6 +211,7 @@ class DocumentDatabase {
       collections: parseJson<string[]>(row.collections_json, []),
       relatedIds: parseJson<string[]>(row.related_ids_json, []),
       semanticVector: parseJson<number[]>(row.semantic_vector_json, []),
+      organizationConfidence: Number(row.organization_confidence ?? 0),
       modified: String(row.modified ?? new Date().toISOString()),
       order: Number(row.display_order ?? 0),
       isInitialized: Boolean(row.is_initialized),
@@ -218,7 +225,7 @@ class DocumentDatabase {
     const documentRevisions = parseJson<DocumentRevision[]>(appState.document_revisions_json, [])
 
     return {
-      version: 4,
+      version: 5,
       workspaces,
       activeWorkspaceId: String(appState.active_workspace_id ?? workspaces[0]?.id ?? ''),
       pages,
@@ -259,6 +266,7 @@ class DocumentDatabase {
               collections_json,
               related_ids_json,
               semantic_vector_json,
+              organization_confidence,
               modified,
               display_order,
               is_initialized,
@@ -273,6 +281,7 @@ class DocumentDatabase {
             serializeJson(page.collections),
             serializeJson(page.relatedIds),
             serializeJson(page.semanticVector),
+            page.organizationConfidence,
             page.modified,
             page.order,
             page.isInitialized ? 1 : 0,

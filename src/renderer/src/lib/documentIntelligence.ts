@@ -20,6 +20,7 @@ type OrganizationResult = {
   indexedPath: string[]
   collections: string[]
   relatedIds: string[]
+  confidence: number
 }
 
 const STOP_WORDS = new Set([
@@ -194,6 +195,7 @@ export function organizeDocument(
   }).sort((a, b) => b.score - a.score)
 
   const bestCollection = collectionScores[0]
+  const secondBestCollection = collectionScores[1]
   const existingTopLevel = new Set(workspaceDocuments.map(document => document.indexedPath[0]).filter(Boolean))
   const inferredFallback = relatedDocuments[0]?.indexedPath.length
     ? relatedDocuments[0].indexedPath
@@ -213,9 +215,24 @@ export function organizeDocument(
     .filter((label, index, values) => values.indexOf(label) === index)
     .slice(0, 3)
 
+  const topScore = bestCollection?.score ?? 0
+  const secondScore = secondBestCollection?.score ?? 0
+  const separation = Math.max(0, topScore - secondScore)
+  const support = relatedDocuments[0]?.score ?? 0
+  const confidence = Math.max(
+    0,
+    Math.min(
+      1,
+      (Math.min(topScore / 6, 1) * 0.55)
+      + (Math.min(separation / 2.5, 1) * 0.25)
+      + (Math.min(support / 1.2, 1) * 0.2),
+    ),
+  )
+
   return {
     indexedPath,
     collections,
     relatedIds: relatedDocuments.map(document => document.id),
+    confidence,
   }
 }
