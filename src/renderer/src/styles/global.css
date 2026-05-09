@@ -1652,14 +1652,64 @@ kbd {
   left: var(--bubble-x);
   top: var(--bubble-y);
   display: flex;
-  align-items: center;
-  gap: 3px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 320px;
   padding: 6px;
   background: var(--bg-raised);
   border: 1px solid var(--border-strong);
   border-radius: var(--r-md);
   box-shadow: 0 16px 42px rgba(0, 0, 0, 0.22), 0 3px 10px rgba(0, 0, 0, 0.12);
   transform: translate(-50%, calc(-100% - 8px));
+}
+
+.bubble-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.bubble-ai-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bubble-ai-input {
+  flex: 1;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--text-1);
+}
+
+.bubble-ai-input::placeholder {
+  color: var(--text-3);
+}
+
+.bubble-ai-submit {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--r-sm);
+  background: var(--bg-hover);
+  color: var(--text-1);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.bubble-ai-submit:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.bubble-ai-error {
+  max-width: 300px;
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .bubble-menu-btn {

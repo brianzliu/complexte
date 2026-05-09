@@ -8,6 +8,18 @@ export type GenerateDocumentResponse = {
   content: string
 }
 
+export type ReviseSelectionRequest = {
+  apiKey: string
+  model: string
+  instruction: string
+  selection: string
+  documentContext?: string
+}
+
+export type ReviseSelectionResponse = {
+  content: string
+}
+
 export type GenerateDocumentStreamCallbacks = {
   onDelta?: (delta: string, content: string) => void | Promise<void>
 }
@@ -49,6 +61,14 @@ type NormalizedGenerateDocumentRequest = {
   prompt: string
 }
 
+type NormalizedReviseSelectionRequest = {
+  apiKey: string
+  model: string
+  instruction: string
+  selection: string
+  documentContext: string
+}
+
 type TokenMode = 'max_completion_tokens' | 'max_tokens'
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
@@ -80,6 +100,26 @@ function normalizeRequest(request: GenerateDocumentRequest): NormalizedGenerateD
   if (!prompt) throw new Error('Enter what you want this document to cover.')
 
   return { apiKey, model, prompt }
+}
+
+function normalizeSelectionRequest(request: ReviseSelectionRequest): NormalizedReviseSelectionRequest {
+  const apiKey = request.apiKey.trim()
+  const model = request.model.trim()
+  const instruction = request.instruction.trim()
+  const selection = request.selection.trim()
+  const documentContext = request.documentContext?.trim() ?? ''
+
+  if (!apiKey) throw new Error('Add an OpenRouter API key in Settings before using inline AI.')
+  if (!selection) throw new Error('Select some text before asking the AI to revise it.')
+  if (!instruction) throw new Error('Tell the AI how you want the selected text revised.')
+
+  return {
+    apiKey,
+    model,
+    instruction,
+    selection,
+    documentContext,
+  }
 }
 
 function readContentValue(content: string | Array<{ text?: string }> | undefined, trim = true): string {
@@ -174,6 +214,42 @@ function buildRequestBody(
   }
 }
 
+function buildSelectionRequestBody(
+  request: NormalizedReviseSelectionRequest,
+  tokenMode: TokenMode,
+): Record<string, unknown> {
+  const contextBlock = request.documentContext
+    ? `Document context:\n${request.documentContext.slice(0, 6000)}`
+    : 'Document context:\n(Not provided)'
+
+  return {
+    model: request.model || undefined,
+    messages: [
+      {
+        role: 'system',
+        content: [
+          'You are revising a user-selected passage inside a document editor.',
+          'Return only the revised replacement text for the selected passage.',
+          'Do not add titles, markdown fences, explanations, or commentary.',
+          'Preserve the document voice unless the instruction explicitly asks for a change.',
+          'You may expand, compress, or rewrite the selection, but stay scoped to the user instruction.',
+        ].join(' '),
+      },
+      {
+        role: 'user',
+        content: [
+          contextBlock,
+          `Selected text:\n${request.selection}`,
+          `Instruction:\n${request.instruction}`,
+        ].join('\n\n'),
+      },
+    ],
+    temperature: 0.45,
+    stream: false,
+    [tokenMode]: 900,
+  }
+}
+
 async function requestOpenRouterDocument(
   request: NormalizedGenerateDocumentRequest,
   tokenMode: TokenMode,
@@ -196,6 +272,32 @@ async function requestOpenRouterDocument(
     throw new OpenRouterRequestError(describeOpenRouterError(response.status, payload), response.status, payload)
   }
   if (!content) throw new Error('OpenRouter returned an empty document.')
+
+  return { content }
+}
+
+async function requestOpenRouterSelectionRevision(
+  request: NormalizedReviseSelectionRequest,
+  tokenMode: TokenMode,
+): Promise<ReviseSelectionResponse> {
+  const response = await fetch(OPENROUTER_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${request.apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://complexte.local',
+      'X-OpenRouter-Title': 'Complexte',
+    },
+    body: JSON.stringify(buildSelectionRequestBody(request, tokenMode)),
+  })
+
+  const payload = await response.json().catch(() => ({})) as OpenRouterChatResponse
+  const content = readOpenRouterContent(payload)
+
+  if (!response.ok) {
+    throw new OpenRouterRequestError(describeOpenRouterError(response.status, payload), response.status, payload)
+  }
+  if (!content) throw new Error('OpenRouter returned an empty revision.')
 
   return { content }
 }
@@ -367,6 +469,29 @@ export async function generateOpenRouterDocumentStream(
 
     try {
       return await requestOpenRouterDocumentStream(normalizedRequest, 'max_tokens', trackingCallbacks)
+    } catch (retryError) {
+      if (retryError instanceof Error) {
+        retryError.message = `${retryError.message} Retried with OpenRouter compatibility token parameter.`
+      }
+      throw retryError
+    }
+  }
+}
+
+export async function generateOpenRouterSelectionRevision(
+  request: ReviseSelectionRequest,
+): Promise<ReviseSelectionResponse> {
+  const normalizedRequest = normalizeSelectionRequest(request)
+
+  try {
+    return await requestOpenRouterSelectionRevision(normalizedRequest, 'max_completion_tokens')
+  } catch (error) {
+    if (!(error instanceof OpenRouterRequestError) || !error.shouldRetryWithCompatibilityRequest()) {
+      throw error
+    }
+
+    try {
+      return await requestOpenRouterSelectionRevision(normalizedRequest, 'max_tokens')
     } catch (retryError) {
       if (retryError instanceof Error) {
         retryError.message = `${retryError.message} Retried with OpenRouter compatibility token parameter.`

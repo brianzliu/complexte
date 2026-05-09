@@ -1,11 +1,19 @@
 import { app, BrowserWindow, ipcMain, nativeImage, shell } from 'electron'
 import { join } from 'path'
-import { generateOpenRouterDocument, type GenerateDocumentRequest } from '../shared/openRouterDocument'
+import {
+  generateOpenRouterDocument,
+  generateOpenRouterSelectionRevision,
+  type GenerateDocumentRequest,
+  type ReviseSelectionRequest,
+} from '../shared/openRouterDocument'
 import type { PersistedDocumentSnapshot } from '../shared/documentSnapshot'
 import { loadDocumentSnapshot, saveDocumentSnapshot } from './documentDatabase'
 
 ipcMain.handle('openrouter:generate-document', async (_event, request: GenerateDocumentRequest) =>
   generateOpenRouterDocument(request),
+)
+ipcMain.handle('openrouter:revise-selection', async (_event, request: ReviseSelectionRequest) =>
+  generateOpenRouterSelectionRevision(request),
 )
 ipcMain.handle('documents:load-snapshot', async () => loadDocumentSnapshot())
 ipcMain.handle('documents:save-snapshot', async (_event, snapshot: PersistedDocumentSnapshot) =>

@@ -9,7 +9,8 @@ import { ListPlugin } from '@platejs/list/react'
 import { toggleList } from '@platejs/list'
 import { MarkdownPlugin } from '@platejs/markdown'
 import remarkGfm from 'remark-gfm'
-import { clonePlateDocument, type PlateDocumentValue } from '../lib/plateDocument'
+import { clonePlateDocument, plateDocumentToPlainText, type PlateDocumentValue } from '../lib/plateDocument'
+import { reviseSelection } from '../lib/openRouter'
 import { useDocumentStore } from '../store/useDocumentStore'
 
 type MenuPosition = {
@@ -160,9 +161,16 @@ function BubbleButton({
 
 function EditorFloatingControls() {
   const editor = useEditorRef()
+  const { aiSettings, content } = useDocumentStore()
   const [selectionMenu, setSelectionMenu] = useState<MenuPosition | null>(null)
   const [slashMenu, setSlashMenu] = useState<MenuPosition | null>(null)
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [aiError, setAiError] = useState<string | null>(null)
+  const [isRevisingSelection, setIsRevisingSelection] = useState(false)
+  const [isBubbleInteracting, setIsBubbleInteracting] = useState(false)
   const isPointerSelectingRef = useRef(false)
+  const selectionRangeRef = useRef<Range | null>(null)
+  const selectionTextRef = useRef('')
 
   const preventDefault = (fn: () => void) => (e: MouseEvent<HTMLButtonElement>) => {
     e.preventDefault()
@@ -170,7 +178,7 @@ function EditorFloatingControls() {
   }
 
   const updateSelectionMenu = useCallback(() => {
-    if (isPointerSelectingRef.current) return
+    if (isPointerSelectingRef.current || isBubbleInteracting) return
 
     const selection = window.getSelection()
     if (
@@ -180,16 +188,26 @@ function EditorFloatingControls() {
       !isSelectionInsideEditor()
     ) {
       setSelectionMenu(null)
+      selectionRangeRef.current = null
+      selectionTextRef.current = ''
       return
     }
 
+    selectionRangeRef.current = selection.getRangeAt(0).cloneRange()
+    selectionTextRef.current = selection.toString().trim()
     setSelectionMenu(getSelectionPosition())
+    setAiError(null)
     setSlashMenu(null)
-  }, [])
+  }, [isBubbleInteracting])
 
   const closeMenus = useCallback(() => {
     setSelectionMenu(null)
     setSlashMenu(null)
+    setAiPrompt('')
+    setAiError(null)
+    setIsBubbleInteracting(false)
+    selectionRangeRef.current = null
+    selectionTextRef.current = ''
   }, [])
 
   useEffect(() => {
@@ -236,6 +254,68 @@ function EditorFloatingControls() {
       document.removeEventListener('pointerup', handlePointerUp, true)
     }
   }, [closeMenus, updateSelectionMenu])
+
+  const replaceSelectedText = useCallback((nextText: string) => {
+    const range = selectionRangeRef.current
+    const selection = window.getSelection()
+    if (!range || !selection) return false
+
+    selection.removeAllRanges()
+    selection.addRange(range)
+
+    const inserted = document.execCommand('insertText', false, nextText)
+    if (inserted) return true
+
+    range.deleteContents()
+    const textNode = document.createTextNode(nextText)
+    range.insertNode(textNode)
+    range.setStartAfter(textNode)
+    range.collapse(true)
+    selection.removeAllRanges()
+    selection.addRange(range)
+    return true
+  }, [])
+
+  const handleAiSubmit = async () => {
+    if (!aiSettings.openRouterApiKey.trim()) {
+      setAiError('Add your OpenRouter key in Settings first.')
+      return
+    }
+
+    if (!aiPrompt.trim()) {
+      setAiError('Describe how you want the selection revised.')
+      return
+    }
+
+    if (!selectionTextRef.current || !selectionRangeRef.current) {
+      setAiError('Select some text before asking the AI to revise it.')
+      return
+    }
+
+    setAiError(null)
+    setIsRevisingSelection(true)
+
+    try {
+      const result = await reviseSelection({
+        apiKey: aiSettings.openRouterApiKey,
+        model: aiSettings.openRouterModel,
+        instruction: aiPrompt,
+        selection: selectionTextRef.current,
+        documentContext: plateDocumentToPlainText(content),
+      })
+
+      if (!replaceSelectedText(result)) {
+        throw new Error('Could not apply the revision to the selected text.')
+      }
+
+      closeMenus()
+      editor.tf.focus()
+    } catch (error) {
+      setAiError(error instanceof Error ? error.message : 'Could not revise the selected text.')
+    } finally {
+      setIsRevisingSelection(false)
+    }
+  }
 
   const openSlashMenu = () => {
     window.setTimeout(() => {
@@ -294,38 +374,66 @@ function EditorFloatingControls() {
         <div
           className="bubble-menu"
           style={{ '--bubble-x': `${selectionMenu.x}px`, '--bubble-y': `${selectionMenu.y}px` } as CSSProperties}
-          onMouseDown={e => e.preventDefault()}
         >
-          <BubbleButton title="Bold" onMouseDown={preventDefault(() => editor.tf.bold.toggle())}>
-            <strong>B</strong>
-          </BubbleButton>
-          <BubbleButton title="Italic" onMouseDown={preventDefault(() => editor.tf.italic.toggle())}>
-            <em>I</em>
-          </BubbleButton>
-          <BubbleButton title="Underline" onMouseDown={preventDefault(() => editor.tf.underline.toggle())}>
-            <span className="bubble-underline">U</span>
-          </BubbleButton>
-          <span className="bubble-menu-divider" />
-          <span className="bubble-menu-label">Text</span>
-          {textColors.map(color => (
-            <button
-              key={color.label}
-              className="bubble-swatch"
-              title={color.label}
-              style={{ '--swatch-color': color.value || 'var(--text-1)' } as CSSProperties}
-              onMouseDown={preventDefault(() => applyTextColor(color.value))}
+          <form
+            className="bubble-ai-form"
+            onSubmit={event => {
+              event.preventDefault()
+              void handleAiSubmit()
+            }}
+            onMouseDown={() => setIsBubbleInteracting(true)}
+          >
+            <input
+              className="bubble-ai-input"
+              type="text"
+              value={aiPrompt}
+              onChange={event => setAiPrompt(event.target.value)}
+              placeholder="Ask AI how to revise this selection..."
+              disabled={isRevisingSelection}
             />
-          ))}
-          <span className="bubble-menu-label">Fill</span>
-          {highlightColors.map(color => (
             <button
-              key={color.label}
-              className="bubble-swatch highlight"
-              title={`${color.label} highlight`}
-              style={{ '--swatch-color': color.value } as CSSProperties}
-              onMouseDown={preventDefault(() => applyHighlight(color.value))}
-            />
-          ))}
+              type="submit"
+              className="bubble-ai-submit"
+              disabled={isRevisingSelection}
+            >
+              {isRevisingSelection ? '...' : 'Ask'}
+            </button>
+          </form>
+
+          {aiError && <p className="bubble-ai-error">{aiError}</p>}
+
+          <div className="bubble-menu-row">
+            <BubbleButton title="Bold" onMouseDown={preventDefault(() => editor.tf.bold.toggle())}>
+              <strong>B</strong>
+            </BubbleButton>
+            <BubbleButton title="Italic" onMouseDown={preventDefault(() => editor.tf.italic.toggle())}>
+              <em>I</em>
+            </BubbleButton>
+            <BubbleButton title="Underline" onMouseDown={preventDefault(() => editor.tf.underline.toggle())}>
+              <span className="bubble-underline">U</span>
+            </BubbleButton>
+            <span className="bubble-menu-divider" />
+            <span className="bubble-menu-label">Text</span>
+            {textColors.map(color => (
+              <button
+                key={color.label}
+                className="bubble-swatch"
+                title={color.label}
+                style={{ '--swatch-color': color.value || 'var(--text-1)' } as CSSProperties}
+                onMouseDown={preventDefault(() => applyTextColor(color.value))}
+              />
+            ))}
+            <span className="bubble-menu-label">Fill</span>
+            {highlightColors.map(color => (
+              <button
+                key={color.label}
+                className="bubble-swatch highlight"
+                title={`${color.label} highlight`}
+                style={{ '--swatch-color': color.value } as CSSProperties}
+                onMouseDown={preventDefault(() => applyHighlight(color.value))}
+              />
+            ))}
+          </div>
         </div>
       )}
 

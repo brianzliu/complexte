@@ -4,6 +4,14 @@ type GenerateDocumentRequest = {
   prompt: string
 }
 
+type ReviseSelectionRequest = {
+  apiKey: string
+  model: string
+  instruction: string
+  selection: string
+  documentContext?: string
+}
+
 type GenerateDocumentResponse = {
   content: string
 }
@@ -14,6 +22,7 @@ type StreamDocumentCallbacks = {
 
 type OpenRouterBridge = {
   generateDocument: (request: GenerateDocumentRequest) => Promise<GenerateDocumentResponse>
+  reviseSelection?: (request: ReviseSelectionRequest) => Promise<GenerateDocumentResponse>
   streamDocument?: (
     request: GenerateDocumentRequest,
     callbacks?: StreamDocumentCallbacks,
@@ -24,7 +33,7 @@ function normalizeOpenRouterError(error: unknown): Error {
   if (!(error instanceof Error)) throw error
 
   return new Error(
-    error.message.replace(/^Error invoking remote method 'openrouter:generate-document': Error:\s*/, ''),
+    error.message.replace(/^Error invoking remote method 'openrouter:[^']+': Error:\s*/, ''),
   )
 }
 
@@ -51,6 +60,18 @@ export async function streamDocument(
     const response = bridge.streamDocument
       ? await bridge.streamDocument(request, callbacks)
       : await bridge.generateDocument(request)
+    return response.content
+  } catch (error) {
+    throw normalizeOpenRouterError(error)
+  }
+}
+
+export async function reviseSelection(request: ReviseSelectionRequest): Promise<string> {
+  const bridge = (window as Window & { openRouter?: OpenRouterBridge }).openRouter
+  if (!bridge?.reviseSelection) throw new Error('Inline AI is not available in this window.')
+
+  try {
+    const response = await bridge.reviseSelection(request)
     return response.content
   } catch (error) {
     throw normalizeOpenRouterError(error)
