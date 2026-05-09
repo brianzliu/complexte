@@ -130,13 +130,13 @@ const INITIAL_WORKSPACES: Workspace[] = [
 ]
 
 const INITIAL_PAGES: PageMeta[] = [
-  { id: 'getting-started', workspaceId: 'personal', name: 'Getting Started', indexedPath: ['Inbox'], modified: new Date(2026, 3, 11, 9, 0).toISOString(), order: 0, isInitialized: true },
-  { id: 'project-roadmap', workspaceId: 'personal', name: 'Project Roadmap', indexedPath: ['Projects', 'Roadmap'], modified: new Date(2026, 3, 10, 14, 30).toISOString(), order: 1, isInitialized: true },
-  { id: 'meeting-notes', workspaceId: 'personal', name: 'Meeting Notes', indexedPath: ['Work', 'Meetings'], modified: new Date(2026, 3, 11, 10, 15).toISOString(), order: 2, isInitialized: true },
-  { id: 'design-philosophy', workspaceId: 'personal', name: 'Design Philosophy', indexedPath: ['Projects', 'Design'], modified: new Date(2026, 3, 8, 16, 0).toISOString(), order: 3, isInitialized: true },
-  { id: 'scratch', workspaceId: 'personal', name: 'Scratch Pad', indexedPath: ['Inbox'], modified: new Date(2026, 3, 11, 8, 45).toISOString(), order: 4, isInitialized: true },
-  { id: 'research', workspaceId: 'client-work', name: 'Research', indexedPath: ['Research'], modified: new Date(2026, 3, 9, 11, 30).toISOString(), order: 0, isInitialized: true },
-  { id: 'drafts', workspaceId: 'client-work', name: 'Drafts', indexedPath: ['Writing', 'Drafts'], modified: new Date(2026, 3, 9, 12, 15).toISOString(), order: 1, isInitialized: true },
+  { id: 'getting-started', workspaceId: 'personal', name: 'Getting Started', indexedPath: ['Inbox'], collections: ['Inbox', 'Projects'], relatedIds: ['scratch'], modified: new Date(2026, 3, 11, 9, 0).toISOString(), order: 0, isInitialized: true },
+  { id: 'project-roadmap', workspaceId: 'personal', name: 'Project Roadmap', indexedPath: ['Projects', 'Roadmap'], collections: ['Projects', 'Design'], relatedIds: ['design-philosophy'], modified: new Date(2026, 3, 10, 14, 30).toISOString(), order: 1, isInitialized: true },
+  { id: 'meeting-notes', workspaceId: 'personal', name: 'Meeting Notes', indexedPath: ['Work', 'Meetings'], collections: ['Work', 'Projects'], relatedIds: ['project-roadmap'], modified: new Date(2026, 3, 11, 10, 15).toISOString(), order: 2, isInitialized: true },
+  { id: 'design-philosophy', workspaceId: 'personal', name: 'Design Philosophy', indexedPath: ['Projects', 'Design'], collections: ['Projects', 'Design'], relatedIds: ['project-roadmap'], modified: new Date(2026, 3, 8, 16, 0).toISOString(), order: 3, isInitialized: true },
+  { id: 'scratch', workspaceId: 'personal', name: 'Scratch Pad', indexedPath: ['Inbox'], collections: ['Inbox'], relatedIds: ['getting-started'], modified: new Date(2026, 3, 11, 8, 45).toISOString(), order: 4, isInitialized: true },
+  { id: 'research', workspaceId: 'client-work', name: 'Research', indexedPath: ['Research'], collections: ['Research'], relatedIds: ['drafts'], modified: new Date(2026, 3, 9, 11, 30).toISOString(), order: 0, isInitialized: true },
+  { id: 'drafts', workspaceId: 'client-work', name: 'Drafts', indexedPath: ['Writing', 'Drafts'], collections: ['Writing', 'Research'], relatedIds: ['research'], modified: new Date(2026, 3, 9, 12, 15).toISOString(), order: 1, isInitialized: true },
 ]
 
 let contentStore: Record<string, PlateDocumentValue> = Object.fromEntries(
@@ -209,6 +209,8 @@ function clonePages(pages: PageMeta[]): PageMeta[] {
   return pages.map(page => ({
     ...page,
     indexedPath: [...page.indexedPath],
+    collections: [...page.collections],
+    relatedIds: [...page.relatedIds],
   }))
 }
 
@@ -231,7 +233,7 @@ function buildSnapshot(state: Pick<
   'workspaces' | 'activeWorkspaceId' | 'pages' | 'activeId' | 'openTabIds'
 >): PersistedDocumentSnapshot {
   return {
-    version: 1,
+    version: 2,
     workspaces: cloneWorkspaces(state.workspaces),
     activeWorkspaceId: state.activeWorkspaceId,
     pages: clonePages(state.pages),
@@ -247,12 +249,17 @@ function applySnapshot(snapshot: PersistedDocumentSnapshot): Pick<
   DocumentStore,
   'workspaces' | 'activeWorkspaceId' | 'pages' | 'activeId' | 'openTabIds' | 'content' | 'contentVersion'
 > {
+  const normalizedPages = snapshot.pages.map(page => ({
+    ...page,
+    collections: page.collections ?? [],
+    relatedIds: page.relatedIds ?? [],
+  }))
   contentStore = cloneContentRecord(snapshot.contentById)
   pageCounter = snapshot.pageCounter
   workspaceCounter = snapshot.workspaceCounter
 
   const workspaces = cloneWorkspaces(snapshot.workspaces)
-  const pages = clonePages(snapshot.pages)
+  const pages = clonePages(normalizedPages)
   const activeWorkspaceId = snapshot.activeWorkspaceId || workspaces[0]?.id || ''
   const activeId = snapshot.activeId && pages.some(page => page.id === snapshot.activeId)
     ? snapshot.activeId
@@ -383,7 +390,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (!page) return
 
     const modified = new Date().toISOString()
-    const indexedPath = organizeDocument(
+    const organization = organizeDocument(
       {
         id,
         name: options.name ?? page.name,
@@ -391,7 +398,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         content,
       },
       getWorkspaceDocuments(pages, page.workspaceId, id),
-    ).indexedPath
+    )
     const value = markdownToPlateDocument(content)
     contentStore[id] = value
 
@@ -402,7 +409,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         ? {
             ...item,
             name: options.name ?? item.name,
-            indexedPath,
+            indexedPath: organization.indexedPath,
+            collections: organization.collections,
+            relatedIds: organization.relatedIds,
             modified,
             isInitialized: options.initialize ? true : item.isInitialized,
           }
@@ -436,7 +445,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
     const modified = new Date().toISOString()
     const plainText = plateDocumentToPlainText(content)
-    const indexedPath = organizeDocument(
+    const organization = organizeDocument(
       {
         id: activeId,
         name: page.name,
@@ -444,10 +453,19 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         content: plainText,
       },
       getWorkspaceDocuments(pages, page.workspaceId, activeId),
-    ).indexedPath
+    )
     contentStore[activeId] = clonePlateDocument(content)
     set({
-      pages: pages.map(item => item.id === activeId ? { ...item, indexedPath, modified, isInitialized: true } : item),
+      pages: pages.map(item => item.id === activeId
+        ? {
+            ...item,
+            indexedPath: organization.indexedPath,
+            collections: organization.collections,
+            relatedIds: organization.relatedIds,
+            modified,
+            isInitialized: true,
+          }
+        : item),
       workspaces: workspaces.map(workspace =>
         workspace.id === page.workspaceId ? { ...workspace, modified } : workspace,
       ),
@@ -493,6 +511,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       workspaceId: activeWorkspaceId,
       name,
       indexedPath,
+      collections: indexedPath.slice(0, 1),
+      relatedIds: [],
       modified: new Date().toISOString(),
       order: siblingCount,
       isInitialized: false,
@@ -523,7 +543,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const modified = new Date().toISOString()
     const { pages } = get()
     const page = pages.find(item => item.id === id)
-    const indexedPath = page
+    const organization = page
       ? organizeDocument(
           {
             id,
@@ -532,10 +552,19 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
             content: plateDocumentToPlainText(contentStore[id] ?? emptyPlateDocument()),
           },
           getWorkspaceDocuments(pages, page.workspaceId, id),
-        ).indexedPath
-      : ['Inbox']
+        )
+      : { indexedPath: ['Inbox'], collections: ['Inbox'], relatedIds: [] }
     set(state => ({
-      pages: state.pages.map(page => page.id === id ? { ...page, name: newName, indexedPath, modified } : page),
+      pages: state.pages.map(page => page.id === id
+        ? {
+            ...page,
+            name: newName,
+            indexedPath: organization.indexedPath,
+            collections: organization.collections,
+            relatedIds: organization.relatedIds,
+            modified,
+          }
+        : page),
     }))
     queuePersist(get())
   },

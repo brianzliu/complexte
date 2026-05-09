@@ -66,6 +66,10 @@ function collectFolderPages(node: TaxonomyNode): PageMeta[] {
   ]
 }
 
+function getPrimaryCollection(page: PageMeta): string {
+  return page.collections[0] || page.indexedPath[0] || 'Unsorted'
+}
+
 export default function Sidebar({ onNewPage }: SidebarProps) {
   const navigate = useNavigate()
   const {
@@ -104,19 +108,22 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
     .sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime())
     .slice(0, 4)
   const collectionCounts = workspacePages.reduce<Map<string, number>>((counts, page) => {
-    const collection = page.indexedPath[0] || 'Unsorted'
-    counts.set(collection, (counts.get(collection) ?? 0) + 1)
+    const collectionsForPage = page.collections.length > 0 ? page.collections : [getPrimaryCollection(page)]
+    collectionsForPage.forEach(collection => {
+      counts.set(collection, (counts.get(collection) ?? 0) + 1)
+    })
     return counts
   }, new Map())
   const collections = Array.from(collectionCounts.entries())
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
   const normalizedSearch = searchQuery.trim().toLowerCase()
   const visiblePages = workspacePages.filter(page => {
-    if (activeCollectionFilter && (page.indexedPath[0] || 'Unsorted') !== activeCollectionFilter) {
+    const collectionsForPage = page.collections.length > 0 ? page.collections : [getPrimaryCollection(page)]
+    if (activeCollectionFilter && !collectionsForPage.includes(activeCollectionFilter)) {
       return false
     }
     if (!normalizedSearch) return true
-    return `${page.name} ${page.indexedPath.join(' ')}`.toLowerCase().includes(normalizedSearch)
+    return `${page.name} ${page.indexedPath.join(' ')} ${collectionsForPage.join(' ')}`.toLowerCase().includes(normalizedSearch)
   })
 
   const taxonomyRoot = createNode('root', [])

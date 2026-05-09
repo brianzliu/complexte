@@ -9,6 +9,8 @@ export interface PageMeta {
   workspaceId: string
   name: string
   indexedPath: string[]
+  collections: string[]
+  relatedIds: string[]
   modified: string
   order: number
   isInitialized: boolean
@@ -17,7 +19,7 @@ export interface PageMeta {
 export type PersistedDocumentContent = unknown[]
 
 export interface PersistedDocumentSnapshot {
-  version: 1
+  version: 2
   workspaces: Workspace[]
   activeWorkspaceId: string
   pages: PageMeta[]

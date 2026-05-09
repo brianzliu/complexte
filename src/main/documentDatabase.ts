@@ -38,6 +38,11 @@ function serializeJson(value: unknown): string {
   return JSON.stringify(value)
 }
 
+function hasColumn(db: Database, tableName: string, columnName: string): boolean {
+  return queryRows(db, `PRAGMA table_info(${tableName});`)
+    .some(row => String(row.name ?? '') === columnName)
+}
+
 async function getSqlJs(): Promise<SqlJsStatic> {
   if (!sqlJsPromise) {
     sqlJsPromise = initSqlJs({
@@ -91,6 +96,8 @@ class DocumentDatabase {
         workspace_id TEXT NOT NULL,
         name TEXT NOT NULL,
         indexed_path TEXT NOT NULL,
+        collections_json TEXT NOT NULL DEFAULT '[]',
+        related_ids_json TEXT NOT NULL DEFAULT '[]',
         modified TEXT NOT NULL,
         display_order INTEGER NOT NULL,
         is_initialized INTEGER NOT NULL,
@@ -98,6 +105,14 @@ class DocumentDatabase {
         FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
       );
     `)
+
+    if (!hasColumn(this.db, 'pages', 'collections_json')) {
+      this.db.run(`ALTER TABLE pages ADD COLUMN collections_json TEXT NOT NULL DEFAULT '[]';`)
+    }
+
+    if (!hasColumn(this.db, 'pages', 'related_ids_json')) {
+      this.db.run(`ALTER TABLE pages ADD COLUMN related_ids_json TEXT NOT NULL DEFAULT '[]';`)
+    }
 
     this.db.run(`
       CREATE TABLE IF NOT EXISTS app_state (
@@ -126,6 +141,8 @@ class DocumentDatabase {
           workspace_id,
           name,
           indexed_path,
+          collections_json,
+          related_ids_json,
           modified,
           display_order,
           is_initialized,
@@ -161,6 +178,8 @@ class DocumentDatabase {
       workspaceId: String(row.workspace_id ?? ''),
       name: String(row.name ?? 'Untitled'),
       indexedPath: parseJson<string[]>(row.indexed_path, []),
+      collections: parseJson<string[]>(row.collections_json, []),
+      relatedIds: parseJson<string[]>(row.related_ids_json, []),
       modified: String(row.modified ?? new Date().toISOString()),
       order: Number(row.display_order ?? 0),
       isInitialized: Boolean(row.is_initialized),
@@ -171,7 +190,7 @@ class DocumentDatabase {
     )
 
     return {
-      version: 1,
+      version: 2,
       workspaces,
       activeWorkspaceId: String(appState.active_workspace_id ?? workspaces[0]?.id ?? ''),
       pages,
@@ -206,6 +225,8 @@ class DocumentDatabase {
               workspace_id,
               name,
               indexed_path,
+              collections_json,
+              related_ids_json,
               modified,
               display_order,
               is_initialized,
@@ -217,6 +238,8 @@ class DocumentDatabase {
             page.workspaceId,
             page.name,
             serializeJson(page.indexedPath),
+            serializeJson(page.collections),
+            serializeJson(page.relatedIds),
             page.modified,
             page.order,
             page.isInitialized ? 1 : 0,
