@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, MouseEvent, ReactNode } from 'react'
 import { Plate, PlateContent, createPlatePlugin, useEditorRef, usePlateEditor } from 'platejs/react'
 import { BasicMarksPlugin } from '@platejs/basic-nodes/react'
@@ -562,8 +562,8 @@ function EditorFloatingControls() {
 }
 
 export default function Editor() {
-  const { content, contentVersion, setContent, saveDocument } = useDocumentStore()
-  const [, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const { activeId, content, contentVersion, pages, setContent, saveDocument } = useDocumentStore()
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>()
   const savedTimerRef = useRef<ReturnType<typeof setTimeout>>()
@@ -606,6 +606,25 @@ export default function Editor() {
     }, 0)
   }, [content, contentVersion, editor])
 
+  const activePage = useMemo(
+    () => (activeId ? pages.find(page => page.id === activeId) ?? null : null),
+    [activeId, pages],
+  )
+  const plainText = useMemo(() => plateDocumentToPlainText(content).trim(), [content])
+  const wordCount = useMemo(
+    () => (plainText ? plainText.split(/\s+/).filter(Boolean).length : 0),
+    [plainText],
+  )
+  const characterCount = plainText.length
+  const readingMinutes = Math.max(1, Math.ceil(wordCount / 220))
+  const confidenceLabel = activePage
+    ? activePage.organizationConfidence >= 0.75
+      ? 'Placement stable'
+      : activePage.organizationConfidence >= 0.45
+        ? 'Placement under review'
+        : 'Placement uncertain'
+    : 'Writing'
+
   return (
     <div className="editor-root">
       <Plate editor={editor} onValueChange={handleValueChange}>
@@ -615,6 +634,32 @@ export default function Editor() {
           </div>
         </div>
       </Plate>
+      <div className="editor-statusbar">
+        <div className={`save-label ${saveState}`}>
+          <span className={`save-dot ${saveState === 'saving' ? 'spinning' : saveState === 'saved' ? 'saved' : ''}`} />
+          <span>
+            {saveState === 'saving'
+              ? 'Autosaving'
+              : saveState === 'saved'
+                ? 'Saved just now'
+                : 'Live editing'}
+          </span>
+        </div>
+        <span className="status-dot-sep" />
+        <span className="status-pill">{wordCount} words</span>
+        <span className="status-dot-sep" />
+        <span className="status-pill">{characterCount} chars</span>
+        <span className="status-dot-sep" />
+        <span className="status-pill">{readingMinutes} min read</span>
+        <span className="status-spacer" />
+        {activePage?.collections[0] && (
+          <span className="mode-pill">{activePage.collections[0]}</span>
+        )}
+        <span className={`mode-pill ${activePage?.organizationConfidence && activePage.organizationConfidence < 0.45 ? 'warning' : ''}`}>
+          {confidenceLabel}
+        </span>
+        <span className="mode-pill">Highlight to ask AI</span>
+      </div>
     </div>
   )
 }

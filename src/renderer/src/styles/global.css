@@ -1714,6 +1714,9 @@ input, textarea {
   flex-direction: column;
   flex: 1;
   overflow: hidden;
+  background:
+    radial-gradient(circle at top center, rgba(255, 255, 255, 0.045), transparent 26%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg) 94%, var(--bg-raised)) 0%, var(--bg) 24%);
 }
 
 /* Toolbar */
@@ -1846,10 +1849,13 @@ input, textarea {
 
 /* Editor pane */
 .editor-pane {
+  position: relative;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--bg);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018), transparent 14%),
+    var(--bg);
 }
 
 .editor-textarea {
@@ -1888,19 +1894,21 @@ input, textarea {
 
 /* Status bar */
 .editor-statusbar {
-  height: 28px;
+  min-height: 34px;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 14px;
+  padding: 0 16px;
   border-top: 1px solid var(--border);
   flex-shrink: 0;
+  background: color-mix(in srgb, var(--bg) 92%, var(--bg-raised));
 }
 
 .status-pill {
   font-size: 11px;
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .status-dot-sep {
@@ -1917,9 +1925,17 @@ input, textarea {
   background: var(--bg-hover);
   border: 1px solid var(--border);
   border-radius: 100px;
-  padding: 1px 8px;
+  padding: 2px 8px;
   font-size: 10.5px;
   letter-spacing: 0.2px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.mode-pill.warning {
+  color: #fca5a5;
+  border-color: rgba(252, 165, 165, 0.28);
+  background: rgba(239, 68, 68, 0.08);
 }
 
 /* ─────────────────────────────────────────
@@ -2287,9 +2303,9 @@ kbd {
   width: 100%;
   height: 100%;
   overflow-y: auto;
-  padding: 32px 40px 64px;
-  font-size: 14.5px;
-  line-height: 1.78;
+  padding: 40px 56px 96px;
+  font-size: 15.5px;
+  line-height: 1.88;
   color: var(--text-1);
   caret-color: var(--accent);
   user-select: text;
@@ -2497,14 +2513,14 @@ kbd {
 
 /* Plate content max-width */
 .plate-editor > * {
-  max-width: 720px;
+  max-width: 760px;
   margin-left: auto;
   margin-right: auto;
 }
 
 .plate-editor :is(h1, h2, h3, h4, h5, h6, p, ul, ol, blockquote, pre, hr) {
   width: 100%;
-  max-width: 720px;
+  max-width: 760px;
   margin-left: auto;
   margin-right: auto;
   text-align: left;
@@ -2513,33 +2529,33 @@ kbd {
 /* Headings */
 .plate-editor h1 {
   font-family: var(--font-heading);
-  font-size: 28px;
+  font-size: 31px;
   font-weight: 700;
   letter-spacing: 0;
-  line-height: 1.25;
+  line-height: 1.18;
   color: var(--text-1);
-  margin: 0 auto 18px;
+  margin: 0 auto 20px;
 }
 
 .plate-editor h2 {
   font-family: var(--font-heading);
-  font-size: 21px;
+  font-size: 22px;
   font-weight: 600;
   letter-spacing: 0;
   line-height: 1.3;
   color: var(--text-1);
-  margin: 36px auto 12px;
-  padding-top: 4px;
+  margin: 40px auto 14px;
+  padding-top: 6px;
   border-top: 1px solid var(--border);
 }
 
 .plate-editor h3 {
   font-family: var(--font-heading);
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 600;
   letter-spacing: 0;
   color: var(--text-1);
-  margin: 28px auto 10px;
+  margin: 30px auto 12px;
 }
 
 .plate-editor h4, .plate-editor h5, .plate-editor h6 {
@@ -2552,9 +2568,9 @@ kbd {
 
 /* Paragraph */
 .plate-editor p {
-  margin: 0 auto 4px;
+  margin: 0 auto 8px;
   color: var(--text-1);
-  min-height: 1.78em;
+  min-height: 1.88em;
 }
 
 /* Inline marks */
@@ -2575,8 +2591,8 @@ kbd {
 /* Blockquote */
 .plate-editor blockquote {
   border-left: 3px solid var(--accent);
-  padding: 4px 0 4px 18px;
-  margin: 16px auto;
+  padding: 6px 0 6px 18px;
+  margin: 20px auto;
   color: var(--text-2);
   font-style: italic;
 }
@@ -2584,13 +2600,13 @@ kbd {
 /* Lists */
 .plate-editor ul,
 .plate-editor ol {
-  padding-left: 22px;
-  margin: 4px auto;
+  padding-left: 24px;
+  margin: 8px auto 10px;
 }
 
 .plate-editor li {
-  margin: 2px 0;
-  line-height: 1.75;
+  margin: 4px 0;
+  line-height: 1.8;
 }
 
 .plate-editor ul > li { list-style-type: disc; }
