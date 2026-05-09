@@ -7,7 +7,7 @@ import DocumentStarter from '../components/DocumentStarter'
 export default function DocumentPage() {
   const navigate = useNavigate()
   const { id } = useParams({ strict: false }) as { id: string }
-  const { activeId, openPage, pages, selectionAiActions, workspaces } = useDocumentStore()
+  const { activeId, documentRevisions, openPage, pages, restoreDocumentRevision, selectionAiActions, workspaces } = useDocumentStore()
 
   useEffect(() => {
     openPage(id)
@@ -23,6 +23,11 @@ export default function DocumentPage() {
   const recentAiActions = page
     ? selectionAiActions
         .filter(action => action.pageId === page.id)
+        .slice(0, 3)
+    : []
+  const recentRevisions = page
+    ? documentRevisions
+        .filter(revision => revision.pageId === page.id)
         .slice(0, 3)
     : []
   const pathSegments = page
@@ -86,6 +91,24 @@ export default function DocumentPage() {
                     <strong>{action.applyMode === 'replace' ? 'Replace' : 'Insert below'}</strong>
                     <span>{action.instruction}</span>
                   </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {recentRevisions.length > 0 && (
+            <div className="document-ai-history">
+              <span className="document-related-label">Recent Revisions</span>
+              <div className="document-ai-history-list">
+                {recentRevisions.map(revision => (
+                  <button
+                    key={revision.id}
+                    className="document-revision-item"
+                    onClick={() => restoreDocumentRevision(revision.id)}
+                  >
+                    <strong>{revision.source}</strong>
+                    <span>{revision.preview || revision.title}</span>
+                  </button>
                 ))}
               </div>
             </div>

@@ -23,6 +23,17 @@ export interface SelectionAiAction {
   createdAt: string
 }
 
+export interface DocumentRevision {
+  id: string
+  workspaceId: string
+  pageId: string
+  title: string
+  preview: string
+  source: 'save' | 'prompt' | 'restore'
+  createdAt: string
+  content: PersistedDocumentContent
+}
+
 export interface PageMeta {
   id: string
   workspaceId: string
@@ -38,7 +49,7 @@ export interface PageMeta {
 export type PersistedDocumentContent = unknown[]
 
 export interface PersistedDocumentSnapshot {
-  version: 2
+  version: 3
   workspaces: Workspace[]
   activeWorkspaceId: string
   pages: PageMeta[]
@@ -46,6 +57,7 @@ export interface PersistedDocumentSnapshot {
   openTabIds: string[]
   promptSessions: PromptSession[]
   selectionAiActions: SelectionAiAction[]
+  documentRevisions: DocumentRevision[]
   contentById: Record<string, PersistedDocumentContent>
   pageCounter: number
   workspaceCounter: number

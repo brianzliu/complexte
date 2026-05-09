@@ -4,7 +4,7 @@ import { createRequire } from 'node:module'
 import { app } from 'electron'
 import initSqlJs from 'sql.js'
 import type { Database, SqlJsStatic } from 'sql.js'
-import type { PageMeta, PersistedDocumentSnapshot, PromptSession, SelectionAiAction, Workspace } from '../shared/documentSnapshot'
+import type { DocumentRevision, PageMeta, PersistedDocumentSnapshot, PromptSession, SelectionAiAction, Workspace } from '../shared/documentSnapshot'
 
 const require = createRequire(import.meta.url)
 const sqlWasmPath = require.resolve('sql.js/dist/sql-wasm.wasm')
@@ -122,6 +122,7 @@ class DocumentDatabase {
         open_tab_ids TEXT NOT NULL,
         prompt_sessions_json TEXT NOT NULL DEFAULT '[]',
         selection_ai_actions_json TEXT NOT NULL DEFAULT '[]',
+        document_revisions_json TEXT NOT NULL DEFAULT '[]',
         page_counter INTEGER NOT NULL,
         workspace_counter INTEGER NOT NULL
       );
@@ -133,6 +134,10 @@ class DocumentDatabase {
 
     if (!hasColumn(this.db, 'app_state', 'selection_ai_actions_json')) {
       this.db.run(`ALTER TABLE app_state ADD COLUMN selection_ai_actions_json TEXT NOT NULL DEFAULT '[]';`)
+    }
+
+    if (!hasColumn(this.db, 'app_state', 'document_revisions_json')) {
+      this.db.run(`ALTER TABLE app_state ADD COLUMN document_revisions_json TEXT NOT NULL DEFAULT '[]';`)
     }
   }
 
@@ -170,6 +175,7 @@ class DocumentDatabase {
           open_tab_ids,
           prompt_sessions_json,
           selection_ai_actions_json,
+          document_revisions_json,
           page_counter,
           workspace_counter
         FROM app_state
@@ -202,9 +208,10 @@ class DocumentDatabase {
     )
     const promptSessions = parseJson<PromptSession[]>(appState.prompt_sessions_json, [])
     const selectionAiActions = parseJson<SelectionAiAction[]>(appState.selection_ai_actions_json, [])
+    const documentRevisions = parseJson<DocumentRevision[]>(appState.document_revisions_json, [])
 
     return {
-      version: 2,
+      version: 3,
       workspaces,
       activeWorkspaceId: String(appState.active_workspace_id ?? workspaces[0]?.id ?? ''),
       pages,
@@ -212,6 +219,7 @@ class DocumentDatabase {
       openTabIds: parseJson<string[]>(appState.open_tab_ids, []),
       promptSessions,
       selectionAiActions,
+      documentRevisions,
       contentById,
       pageCounter: Number(appState.page_counter ?? pages.length),
       workspaceCounter: Number(appState.workspace_counter ?? workspaces.length),
@@ -273,9 +281,10 @@ class DocumentDatabase {
             open_tab_ids,
             prompt_sessions_json,
             selection_ai_actions_json,
+            document_revisions_json,
             page_counter,
             workspace_counter
-          ) VALUES (1, ?, ?, ?, ?, ?, ?, ?);
+          ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?);
         `,
         [
           snapshot.activeWorkspaceId,
@@ -283,6 +292,7 @@ class DocumentDatabase {
           serializeJson(snapshot.openTabIds),
           serializeJson(snapshot.promptSessions),
           serializeJson(snapshot.selectionAiActions),
+          serializeJson(snapshot.documentRevisions),
           snapshot.pageCounter,
           snapshot.workspaceCounter,
         ],

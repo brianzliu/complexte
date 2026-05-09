@@ -9,10 +9,10 @@ import {
 } from '../lib/plateDocument'
 import { loadPersistedSnapshot, savePersistedSnapshot } from '../lib/documentPersistence'
 import { organizeDocument } from '../lib/documentIntelligence'
-import type { PageMeta, PersistedDocumentContent, PersistedDocumentSnapshot, PromptSession, SelectionAiAction, Workspace } from '../../../shared/documentSnapshot'
+import type { DocumentRevision, PageMeta, PersistedDocumentContent, PersistedDocumentSnapshot, PromptSession, SelectionAiAction, Workspace } from '../../../shared/documentSnapshot'
 
 export type Theme = 'dark' | 'light' | 'auto'
-export type { PageMeta, PromptSession, SelectionAiAction, Workspace } from '../../../shared/documentSnapshot'
+export type { DocumentRevision, PageMeta, PromptSession, SelectionAiAction, Workspace } from '../../../shared/documentSnapshot'
 
 export interface AiSettings {
   openRouterApiKey: string
@@ -146,6 +146,7 @@ let pageCounter = INITIAL_PAGES.length
 let workspaceCounter = INITIAL_WORKSPACES.length
 let promptSessionCounter = 0
 let selectionAiActionCounter = 0
+let documentRevisionCounter = 0
 let persistTimer: ReturnType<typeof setTimeout> | null = null
 let persistRequestId = 0
 
@@ -169,6 +170,17 @@ function generateSelectionAiActionId(): string {
   return `selection-ai-action-${++selectionAiActionCounter}`
 }
 
+function generateDocumentRevisionId(): string {
+  return `document-revision-${++documentRevisionCounter}`
+}
+
+function createRevisionPreview(content: PlateDocumentValue): string {
+  return plateDocumentToPlainText(content)
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 180)
+}
+
 function getWorkspaceDocuments(pages: PageMeta[], workspaceId: string, excludeId?: string) {
   return pages
     .filter(page => page.workspaceId === workspaceId && page.id !== excludeId)
@@ -188,6 +200,7 @@ interface DocumentStore {
   openTabIds: string[]
   promptSessions: PromptSession[]
   selectionAiActions: SelectionAiAction[]
+  documentRevisions: DocumentRevision[]
   content: PlateDocumentValue
   contentVersion: number
   isSidebarCollapsed: boolean
@@ -212,6 +225,8 @@ interface DocumentStore {
   setAiSettings: (settings: Partial<AiSettings>) => void
   addPromptSession: (session: Omit<PromptSession, 'id' | 'createdAt'>) => void
   addSelectionAiAction: (action: Omit<SelectionAiAction, 'id' | 'createdAt'>) => void
+  addDocumentRevision: (revision: Omit<DocumentRevision, 'id' | 'createdAt' | 'preview'>) => void
+  restoreDocumentRevision: (revisionId: string) => void
   getPageContent: (id: string) => string
 }
 
@@ -244,10 +259,10 @@ function serializeContentRecord(source: Record<string, PlateDocumentValue>): Rec
 
 function buildSnapshot(state: Pick<
   DocumentStore,
-  'workspaces' | 'activeWorkspaceId' | 'pages' | 'activeId' | 'openTabIds' | 'promptSessions' | 'selectionAiActions'
+  'workspaces' | 'activeWorkspaceId' | 'pages' | 'activeId' | 'openTabIds' | 'promptSessions' | 'selectionAiActions' | 'documentRevisions'
 >): PersistedDocumentSnapshot {
   return {
-    version: 2,
+    version: 3,
     workspaces: cloneWorkspaces(state.workspaces),
     activeWorkspaceId: state.activeWorkspaceId,
     pages: clonePages(state.pages),
@@ -255,6 +270,10 @@ function buildSnapshot(state: Pick<
     openTabIds: [...state.openTabIds],
     promptSessions: state.promptSessions.map(session => ({ ...session, relatedDocumentIds: [...session.relatedDocumentIds] })),
     selectionAiActions: state.selectionAiActions.map(action => ({ ...action })),
+    documentRevisions: state.documentRevisions.map(revision => ({
+      ...revision,
+      content: clonePlateDocument(revision.content as PlateDocumentValue) as PersistedDocumentContent,
+    })),
     contentById: serializeContentRecord(contentStore),
     pageCounter,
     workspaceCounter,
@@ -263,7 +282,7 @@ function buildSnapshot(state: Pick<
 
 function applySnapshot(snapshot: PersistedDocumentSnapshot): Pick<
   DocumentStore,
-  'workspaces' | 'activeWorkspaceId' | 'pages' | 'activeId' | 'openTabIds' | 'promptSessions' | 'selectionAiActions' | 'content' | 'contentVersion'
+  'workspaces' | 'activeWorkspaceId' | 'pages' | 'activeId' | 'openTabIds' | 'promptSessions' | 'selectionAiActions' | 'documentRevisions' | 'content' | 'contentVersion'
 > {
   const normalizedPages = snapshot.pages.map(page => ({
     ...page,
@@ -286,8 +305,13 @@ function applySnapshot(snapshot: PersistedDocumentSnapshot): Pick<
     relatedDocumentIds: session.relatedDocumentIds ?? [],
   }))
   const selectionAiActions = (snapshot.selectionAiActions ?? []).map(action => ({ ...action }))
+  const documentRevisions = (snapshot.documentRevisions ?? []).map(revision => ({
+    ...revision,
+    content: clonePlateDocument(revision.content as PlateDocumentValue) as PersistedDocumentContent,
+  }))
   promptSessionCounter = promptSessions.length
   selectionAiActionCounter = selectionAiActions.length
+  documentRevisionCounter = documentRevisions.length
 
   return {
     workspaces,
@@ -297,6 +321,7 @@ function applySnapshot(snapshot: PersistedDocumentSnapshot): Pick<
     openTabIds,
     promptSessions,
     selectionAiActions,
+    documentRevisions,
     content: clonePlateDocument(activeId ? contentStore[activeId] ?? emptyPlateDocument() : emptyPlateDocument()),
     contentVersion: Date.now(),
   }
@@ -338,6 +363,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   openTabIds: [],
   promptSessions: [],
   selectionAiActions: [],
+  documentRevisions: [],
   content: emptyPlateDocument(),
   contentVersion: 0,
   isSidebarCollapsed: false,
@@ -497,6 +523,13 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         workspace.id === page.workspaceId ? { ...workspace, modified } : workspace,
       ),
     })
+    get().addDocumentRevision({
+      workspaceId: page.workspaceId,
+      pageId: page.id,
+      title: page.name,
+      source: 'save',
+      content: clonePlateDocument(content) as PersistedDocumentContent,
+    })
     queuePersist(get())
   },
 
@@ -637,6 +670,72 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         ...state.selectionAiActions,
       ].slice(0, 120),
     }))
+    queuePersist(get())
+  },
+
+  addDocumentRevision: revision => {
+    set(state => ({
+      documentRevisions: [
+        {
+          ...revision,
+          id: generateDocumentRevisionId(),
+          createdAt: new Date().toISOString(),
+          preview: createRevisionPreview(revision.content as PlateDocumentValue),
+          content: clonePlateDocument(revision.content as PlateDocumentValue) as PersistedDocumentContent,
+        },
+        ...state.documentRevisions.filter(item => !(item.pageId === revision.pageId && item.source === revision.source && item.preview === createRevisionPreview(revision.content as PlateDocumentValue))),
+      ].slice(0, 200),
+    }))
+    queuePersist(get())
+  },
+
+  restoreDocumentRevision: revisionId => {
+    const { activeId, contentVersion, documentRevisions, pages, workspaces } = get()
+    const revision = documentRevisions.find(item => item.id === revisionId)
+    if (!revision) return
+
+    const page = pages.find(item => item.id === revision.pageId)
+    if (!page) return
+
+    const nextContent = clonePlateDocument(revision.content as PlateDocumentValue)
+    const plainText = plateDocumentToPlainText(nextContent)
+    const modified = new Date().toISOString()
+    const organization = organizeDocument(
+      {
+        id: page.id,
+        name: page.name,
+        indexedPath: page.indexedPath,
+        content: plainText,
+      },
+      getWorkspaceDocuments(pages, page.workspaceId, page.id),
+    )
+
+    contentStore[page.id] = clonePlateDocument(nextContent)
+    set({
+      content: activeId === page.id ? clonePlateDocument(nextContent) : get().content,
+      contentVersion: activeId === page.id ? contentVersion + 1 : contentVersion,
+      pages: pages.map(item => item.id === page.id
+        ? {
+            ...item,
+            indexedPath: organization.indexedPath,
+            collections: organization.collections,
+            relatedIds: organization.relatedIds,
+            modified,
+            isInitialized: true,
+          }
+        : item),
+      workspaces: workspaces.map(workspace =>
+        workspace.id === page.workspaceId ? { ...workspace, modified } : workspace,
+      ),
+    })
+
+    get().addDocumentRevision({
+      workspaceId: page.workspaceId,
+      pageId: page.id,
+      title: page.name,
+      source: 'restore',
+      content: nextContent as PersistedDocumentContent,
+    })
     queuePersist(get())
   },
 

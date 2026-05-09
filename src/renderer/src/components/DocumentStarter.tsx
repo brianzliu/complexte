@@ -1,6 +1,7 @@
 import { FormEvent, useMemo, useState } from 'react'
 import { streamDocument } from '../lib/openRouter'
 import { buildExcerpt, scoreDocumentSimilarity } from '../lib/documentIntelligence'
+import { markdownToPlateDocument } from '../lib/plateDocument'
 import { useDocumentStore } from '../store/useDocumentStore'
 
 function deriveTitle(markdown: string, fallback: string): string {
@@ -43,7 +44,7 @@ function buildGenerationPrompt(
 }
 
 export default function DocumentStarter({ pageId }: { pageId: string }) {
-  const { addPromptSession, aiSettings, getPageContent, initializePage, pages, setPageContent } = useDocumentStore()
+  const { addDocumentRevision, addPromptSession, aiSettings, getPageContent, initializePage, pages, setPageContent } = useDocumentStore()
   const [prompt, setPrompt] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -134,6 +135,13 @@ export default function DocumentStarter({ pageId }: { pageId: string }) {
           pageId,
           prompt,
           relatedDocumentIds: relatedDocuments.map(document => document.id),
+        })
+        addDocumentRevision({
+          workspaceId: page.workspaceId,
+          pageId,
+          title: deriveTitle(streamedContent, prompt),
+          source: 'prompt',
+          content: markdownToPlateDocument(streamedContent),
         })
       }
       flushContent()
