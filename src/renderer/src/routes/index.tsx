@@ -2,12 +2,18 @@ import { useNavigate } from '@tanstack/react-router'
 import { useDocumentStore } from '../store/useDocumentStore'
 
 export default function IndexPage() {
-  const { activeWorkspaceId, createPage, pages, workspaces } = useDocumentStore()
+  const { activeWorkspaceId, createPage, initializePage, pages, workspaces } = useDocumentStore()
   const navigate = useNavigate()
   const activeWorkspace = workspaces.find(workspace => workspace.id === activeWorkspaceId)
 
-  const handleNewPage = () => {
+  const handleNewAIDraft = () => {
     const page = createPage('Untitled')
+    navigate({ to: '/document/$id', params: { id: page.id } })
+  }
+
+  const handleNewBlankPage = () => {
+    const page = createPage('Untitled')
+    initializePage(page.id)
     navigate({ to: '/document/$id', params: { id: page.id } })
   }
 
@@ -28,14 +34,22 @@ export default function IndexPage() {
       <div className="welcome-inner">
         <h1 className="welcome-greeting">{greeting()}</h1>
         <p className="welcome-sub">{activeWorkspace?.name ?? 'Workspace'}</p>
+        <p className="welcome-helper">
+          Start with a prompt and let Complexte draft against the most relevant documents in this workspace.
+        </p>
 
-        <button className="welcome-new-btn" onClick={handleNewPage}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          New Page
-        </button>
+        <div className="welcome-actions">
+          <button className="welcome-new-btn" onClick={handleNewAIDraft}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            New with AI
+          </button>
+          <button className="welcome-secondary-btn" onClick={handleNewBlankPage}>
+            Blank document
+          </button>
+        </div>
 
         {recentPages.length > 0 && (
           <div className="welcome-recent">
@@ -64,13 +78,13 @@ export default function IndexPage() {
               <div className="shortcut-keys">
                 <kbd>⌘</kbd><kbd>N</kbd>
               </div>
-              <span>New page</span>
+              <span>New AI draft</span>
             </div>
             <div className="shortcut-item">
               <div className="shortcut-keys">
                 <kbd>⌘</kbd><kbd>T</kbd>
               </div>
-              <span>New page here</span>
+              <span>New draft here</span>
             </div>
             <div className="shortcut-item">
               <div className="shortcut-keys">
