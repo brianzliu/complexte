@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, MouseEvent } from 'react'
 import { buildExcerpt, scoreDocumentSimilarity } from '../lib/documentIntelligence'
 import { PageMeta, useDocumentStore } from '../store/useDocumentStore'
+import type { DocumentLinkType } from '../../../shared/documentSnapshot'
 
 interface SidebarProps {
   onNewPage: () => void
@@ -71,6 +72,13 @@ function getPrimaryCollection(page: PageMeta): string {
   return page.collections[0] || page.indexedPath[0] || 'Unsorted'
 }
 
+function formatLinkType(type: DocumentLinkType): string {
+  if (type === 'related_to') return 'Related'
+  if (type === 'derived_from') return 'Derived from'
+  if (type === 'supports') return 'Supports'
+  return 'Extends'
+}
+
 export default function Sidebar({ onNewPage }: SidebarProps) {
   const navigate = useNavigate()
   const {
@@ -109,6 +117,22 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
   const recentPages = [...workspacePages]
     .sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime())
     .slice(0, 4)
+  const activePage = activeId
+    ? workspacePages.find(page => page.id === activeId) ?? null
+    : null
+  const suggestedLinkSource = activePage ?? recentPages[0] ?? null
+  const suggestedLinks = useMemo(
+    () => suggestedLinkSource
+      ? suggestedLinkSource.relatedLinks
+          .map(link => {
+            const page = workspacePages.find(candidate => candidate.id === link.targetId)
+            return page ? { page, type: link.type } : null
+          })
+          .filter((link): link is NonNullable<typeof link> => Boolean(link))
+          .slice(0, 4)
+      : [],
+    [suggestedLinkSource, workspacePages],
+  )
   const collectionCounts = workspacePages.reduce<Map<string, number>>((counts, page) => {
     const collectionsForPage = page.collections.length > 0 ? page.collections : [getPrimaryCollection(page)]
     collectionsForPage.forEach(collection => {
@@ -590,6 +614,27 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
                     onClick={() => navigate({ to: '/document/$id', params: { id: page.id } })}
                   >
                     <span>{page.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {suggestedLinks.length > 0 && suggestedLinkSource && (
+            <div className="sidebar-curated-group">
+              <div className="sidebar-mini-label">
+                Suggested Links
+                <span className="sidebar-mini-context">From {suggestedLinkSource.name}</span>
+              </div>
+              <div className="sidebar-mini-list">
+                {suggestedLinks.map(link => (
+                  <button
+                    key={`${suggestedLinkSource.id}-${link.page.id}-${link.type}`}
+                    className={`sidebar-mini-item ${activeId === link.page.id ? 'active' : ''}`}
+                    onClick={() => navigate({ to: '/document/$id', params: { id: link.page.id } })}
+                  >
+                    <span className="sidebar-mini-item-label">{formatLinkType(link.type)}</span>
+                    <span>{link.page.name}</span>
                   </button>
                 ))}
               </div>

@@ -460,6 +460,15 @@ input, textarea {
   text-transform: uppercase;
 }
 
+.sidebar-mini-context {
+  margin-left: 6px;
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.2px;
+  text-transform: none;
+}
+
 .sidebar-mini-list {
   display: flex;
   flex-direction: column;
@@ -479,6 +488,17 @@ input, textarea {
 .sidebar-mini-item.active {
   background: var(--bg-hover);
   color: var(--text-1);
+}
+
+.sidebar-mini-item-label {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 8px;
+  color: var(--text-3);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.35px;
+  text-transform: uppercase;
 }
 
 .sidebar-chip-list {
