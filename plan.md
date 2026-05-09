@@ -148,15 +148,18 @@ The editor should evolve from "markdown editor with controls" into "clean writin
 
 ### Inline AI on selection
 
-When text is highlighted, the bubble should support:
+When text is highlighted, the default interaction should be a compact input anchored to the selection, not a row of preset rewrite buttons.
 
-- `Expand`
-- `Rewrite`
-- `Summarize`
-- `Fix tone`
-- `Custom ask...`
+The user should be able to type any instruction they want, for example:
 
-The `Custom ask...` action opens a compact input anchored to the selection. The model receives:
+- "expand this with more detail"
+- "make this clearer"
+- "rewrite this in a more technical tone"
+- "turn this into a short summary"
+
+Preset suggestions can exist as lightweight placeholders or examples, but the primary UX should always be a freeform ask box.
+
+The model receives:
 
 - selected text
 - surrounding document context
