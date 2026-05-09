@@ -1,6 +1,6 @@
 import { FormEvent, useMemo, useState } from 'react'
 import { streamDocument } from '../lib/openRouter'
-import { buildExcerpt, scoreDocumentSimilarity } from '../lib/documentIntelligence'
+import { findRelevantChunks } from '../lib/documentIntelligence'
 import { markdownToPlateDocument } from '../lib/plateDocument'
 import { useDocumentStore } from '../store/useDocumentStore'
 
@@ -24,18 +24,18 @@ function deriveTitle(markdown: string, fallback: string): string {
 
 function buildGenerationPrompt(
   prompt: string,
-  relatedDocuments: Array<{ name: string; excerpt: string }>,
+  relatedChunks: Array<{ documentName: string; indexedPath: string[]; excerpt: string }>,
 ): string {
-  if (relatedDocuments.length === 0) return prompt
+  if (relatedChunks.length === 0) return prompt
 
   return [
     'User request:',
     prompt,
     '',
-    'Relevant workspace context:',
-    ...relatedDocuments.map((document, index) => [
-      `Document ${index + 1}: ${document.name}`,
-      document.excerpt,
+    'Relevant workspace passages:',
+    ...relatedChunks.map((chunk, index) => [
+      `Passage ${index + 1}: ${chunk.documentName}${chunk.indexedPath.length > 0 ? ` (${chunk.indexedPath.join(' / ')})` : ''}`,
+      chunk.excerpt,
     ].join('\n')),
     '',
     'Write the new document using the request as the main goal.',
@@ -50,24 +50,27 @@ export default function DocumentStarter({ pageId }: { pageId: string }) {
   const [isGenerating, setIsGenerating] = useState(false)
   const hasOpenRouterKey = aiSettings.openRouterApiKey.trim().length > 0
   const page = pages.find(item => item.id === pageId)
-  const relatedDocuments = useMemo(
+  const relatedChunks = useMemo(
     () => (page && prompt.trim())
-      ? pages
-          .filter(candidate => candidate.workspaceId === page.workspaceId && candidate.id !== pageId)
-          .map(candidate => {
-            const content = getPageContent(candidate.id)
-            return {
+      ? findRelevantChunks(
+          prompt,
+          pages
+            .filter(candidate => candidate.workspaceId === page.workspaceId && candidate.id !== pageId)
+            .map(candidate => ({
               id: candidate.id,
               name: candidate.name,
-              excerpt: buildExcerpt(content, 180),
-              score: scoreDocumentSimilarity(prompt, candidate.name, content),
-            }
-          })
-          .filter(candidate => candidate.score > 0)
-          .sort((a, b) => b.score - a.score)
-          .slice(0, 3)
+              indexedPath: candidate.indexedPath,
+              semanticVector: candidate.semanticVector,
+              content: getPageContent(candidate.id),
+            })),
+          5,
+        )
       : [],
     [getPageContent, page, pageId, pages, prompt],
+  )
+  const relatedDocumentIds = useMemo(
+    () => Array.from(new Set(relatedChunks.map(chunk => chunk.documentId))),
+    [relatedChunks],
   )
 
   const canGenerate = useMemo(
@@ -119,7 +122,7 @@ export default function DocumentStarter({ pageId }: { pageId: string }) {
           model: aiSettings.openRouterModel,
           prompt: buildGenerationPrompt(
             prompt,
-            relatedDocuments.map(({ name, excerpt }) => ({ name, excerpt })),
+            relatedChunks.map(({ documentName, indexedPath, excerpt }) => ({ documentName, indexedPath, excerpt })),
           ),
         },
         {
@@ -134,7 +137,7 @@ export default function DocumentStarter({ pageId }: { pageId: string }) {
           workspaceId: page.workspaceId,
           pageId,
           prompt,
-          relatedDocumentIds: relatedDocuments.map(document => document.id),
+          relatedDocumentIds,
         })
         addDocumentRevision({
           workspaceId: page.workspaceId,
@@ -204,17 +207,20 @@ export default function DocumentStarter({ pageId }: { pageId: string }) {
           </div>
         </form>
 
-        {relatedDocuments.length > 0 ? (
+        {relatedChunks.length > 0 ? (
           <div className="prompt-context-panel">
             <div className="prompt-context-header">
               <span className="prompt-context-label">Will use related context</span>
-              <span className="prompt-context-count">{relatedDocuments.length} docs</span>
+              <span className="prompt-context-count">{relatedChunks.length} passages from {relatedDocumentIds.length} docs</span>
             </div>
             <div className="prompt-context-list">
-              {relatedDocuments.map(document => (
-                <div key={document.id} className="prompt-context-item">
-                  <div className="prompt-context-title">{document.name}</div>
-                  <div className="prompt-context-excerpt">{document.excerpt}</div>
+              {relatedChunks.map(chunk => (
+                <div key={chunk.id} className="prompt-context-item">
+                  <div className="prompt-context-title">
+                    {chunk.documentName}
+                    {chunk.indexedPath.length > 0 && <span className="prompt-context-path">{chunk.indexedPath.join(' / ')}</span>}
+                  </div>
+                  <div className="prompt-context-excerpt">{chunk.excerpt}</div>
                 </div>
               ))}
             </div>

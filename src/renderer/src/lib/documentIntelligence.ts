@@ -22,6 +22,16 @@ export type OrganizationSuggestion = {
   score: number
 }
 
+export type RetrievedChunk = {
+  id: string
+  documentId: string
+  documentName: string
+  indexedPath: string[]
+  content: string
+  excerpt: string
+  score: number
+}
+
 type OrganizationResult = {
   indexedPath: string[]
   collections: string[]
@@ -181,6 +191,104 @@ export function buildExcerpt(body: string, maxLength = 550): string {
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, maxLength)
+}
+
+export function splitIntoSemanticChunks(body: string, maxChunkLength = 320): string[] {
+  const normalized = body
+    .replace(/\r/g, '')
+    .trim()
+
+  if (!normalized) return []
+
+  const blocks = normalized
+    .split(/\n{2,}/)
+    .map(block => block.trim())
+    .filter(Boolean)
+
+  const chunks: string[] = []
+  let buffer = ''
+
+  blocks.forEach(block => {
+    const next = buffer ? `${buffer}\n\n${block}` : block
+    if (next.length <= maxChunkLength) {
+      buffer = next
+      return
+    }
+
+    if (buffer) {
+      chunks.push(buffer)
+      buffer = ''
+    }
+
+    if (block.length <= maxChunkLength) {
+      buffer = block
+      return
+    }
+
+    const sentences = block
+      .split(/(?<=[.!?])\s+/)
+      .map(sentence => sentence.trim())
+      .filter(Boolean)
+
+    let sentenceBuffer = ''
+    sentences.forEach(sentence => {
+      const candidate = sentenceBuffer ? `${sentenceBuffer} ${sentence}` : sentence
+      if (candidate.length <= maxChunkLength) {
+        sentenceBuffer = candidate
+      } else {
+        if (sentenceBuffer) chunks.push(sentenceBuffer)
+        sentenceBuffer = sentence
+      }
+    })
+
+    if (sentenceBuffer) {
+      buffer = sentenceBuffer
+    }
+  })
+
+  if (buffer) chunks.push(buffer)
+
+  return chunks.slice(0, 18)
+}
+
+export function findRelevantChunks(
+  queryText: string,
+  workspaceDocuments: WorkspaceDocument[],
+  limit = 5,
+): RetrievedChunk[] {
+  if (!queryText.trim()) return []
+
+  const scoredChunks = workspaceDocuments.flatMap(document => {
+    const chunks = splitIntoSemanticChunks(document.content)
+
+    return chunks
+      .map((chunk, index) => {
+        const score = scoreDocumentSimilarity(
+          queryText,
+          document.name,
+          chunk,
+          document.indexedPath.slice(0, 1),
+          buildSemanticVector(document.name, chunk, document.indexedPath.slice(0, 1)),
+        )
+
+        return {
+          id: `${document.id}-chunk-${index + 1}`,
+          documentId: document.id,
+          documentName: document.name,
+          indexedPath: document.indexedPath,
+          content: chunk,
+          excerpt: buildExcerpt(chunk, 180),
+          score,
+        }
+      })
+      .filter(chunk => chunk.score > 0)
+      .sort((left, right) => right.score - left.score)
+      .slice(0, 2)
+  })
+
+  return scoredChunks
+    .sort((left, right) => right.score - left.score)
+    .slice(0, limit)
 }
 
 export function organizeDocument(
