@@ -208,7 +208,13 @@ export default function DocumentPage() {
               <div className="document-ai-history-list">
                 {recentAiActions.map(action => (
                   <div key={action.id} className="document-ai-history-item">
-                    <strong>{action.applyMode === 'replace' ? 'Replace' : 'Insert below'}</strong>
+                    <strong>{
+                      action.applyMode === 'replace'
+                        ? 'Replace'
+                        : action.applyMode === 'insert-below'
+                          ? 'Insert below'
+                          : 'Suggest below'
+                    }</strong>
                     <span>{action.instruction}</span>
                   </div>
                 ))}

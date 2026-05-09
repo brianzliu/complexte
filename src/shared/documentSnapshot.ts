@@ -19,7 +19,7 @@ export interface SelectionAiAction {
   pageId: string
   instruction: string
   selectionPreview: string
-  applyMode: 'replace' | 'insert-below'
+  applyMode: 'replace' | 'insert-below' | 'suggestion'
   createdAt: string
 }
 

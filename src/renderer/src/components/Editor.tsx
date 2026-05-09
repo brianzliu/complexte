@@ -164,7 +164,7 @@ function EditorFloatingControls() {
   const { activeId, addSelectionAiAction, aiSettings, content, pages } = useDocumentStore()
   const [selectionMenu, setSelectionMenu] = useState<MenuPosition | null>(null)
   const [slashMenu, setSlashMenu] = useState<MenuPosition | null>(null)
-  const [applyMode, setApplyMode] = useState<'replace' | 'insert-below'>('replace')
+  const [applyMode, setApplyMode] = useState<'replace' | 'insert-below' | 'suggestion'>('replace')
   const [aiPrompt, setAiPrompt] = useState('')
   const [aiError, setAiError] = useState<string | null>(null)
   const [isRevisingSelection, setIsRevisingSelection] = useState(false)
@@ -299,6 +299,11 @@ function EditorFloatingControls() {
     return true
   }, [])
 
+  const insertSuggestionBelowSelection = useCallback((nextText: string) => {
+    const suggestionText = `Suggestion:\n${nextText}`
+    return insertBelowSelection(suggestionText)
+  }, [insertBelowSelection])
+
   const handleAiSubmit = async () => {
     if (!aiSettings.openRouterApiKey.trim()) {
       setAiError('Add your OpenRouter key in Settings first.')
@@ -329,7 +334,9 @@ function EditorFloatingControls() {
 
       const applied = applyMode === 'replace'
         ? replaceSelectedText(result)
-        : insertBelowSelection(result)
+        : applyMode === 'insert-below'
+          ? insertBelowSelection(result)
+          : insertSuggestionBelowSelection(result)
 
       if (!applied) {
         throw new Error('Could not apply the revision to the selected text.')
@@ -435,6 +442,13 @@ function EditorFloatingControls() {
                 onClick={() => setApplyMode('insert-below')}
               >
                 Insert below
+              </button>
+              <button
+                type="button"
+                className={`bubble-ai-mode-btn ${applyMode === 'suggestion' ? 'active' : ''}`}
+                onClick={() => setApplyMode('suggestion')}
+              >
+                Suggest below
               </button>
             </div>
             <div className="bubble-ai-input-row">
