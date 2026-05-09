@@ -88,6 +88,8 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
   const [contextMenu, setContextMenu] = useState<TreeContextMenu | null>(null)
   const [selectedPageIds, setSelectedPageIds] = useState<Set<string>>(() => new Set())
   const [isSelectingPages, setIsSelectingPages] = useState(false)
+  const [activeCollectionFilter, setActiveCollectionFilter] = useState<string | null>(null)
+  const [isAgentViewOpen, setIsAgentViewOpen] = useState(true)
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(
     () => new Set(['Inbox', 'Projects', 'Projects/Roadmap', 'Projects/Design', 'Work', 'Work/Meetings', 'Research', 'Writing']),
@@ -98,8 +100,21 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
   const contextMenuRef = useRef<HTMLDivElement>(null)
 
   const workspacePages = pages.filter(page => page.workspaceId === activeWorkspaceId)
+  const recentPages = [...workspacePages]
+    .sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime())
+    .slice(0, 4)
+  const collectionCounts = workspacePages.reduce<Map<string, number>>((counts, page) => {
+    const collection = page.indexedPath[0] || 'Unsorted'
+    counts.set(collection, (counts.get(collection) ?? 0) + 1)
+    return counts
+  }, new Map())
+  const collections = Array.from(collectionCounts.entries())
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
   const normalizedSearch = searchQuery.trim().toLowerCase()
   const visiblePages = workspacePages.filter(page => {
+    if (activeCollectionFilter && (page.indexedPath[0] || 'Unsorted') !== activeCollectionFilter) {
+      return false
+    }
     if (!normalizedSearch) return true
     return `${page.name} ${page.indexedPath.join(' ')}`.toLowerCase().includes(normalizedSearch)
   })
@@ -165,6 +180,7 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
   const handleWorkspaceSelect = (id: string) => {
     setActiveWorkspace(id)
     setSearchQuery('')
+    setActiveCollectionFilter(null)
     setIsSelectingPages(false)
     setSelectedPageIds(new Set())
     navigate({ to: '/' })
@@ -501,14 +517,83 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
       </div>
 
       <div className="sidebar-list-wrap">
+        <div className="sidebar-curated-wrap">
+          <div className="sidebar-section-header">
+            <span>Quick Access</span>
+            {activeCollectionFilter && (
+              <button className="section-text-btn" onClick={() => setActiveCollectionFilter(null)}>
+                Clear
+              </button>
+            )}
+          </div>
+
+          <div className="sidebar-curated-grid">
+            <button
+              className={`sidebar-curated-card ${activeCollectionFilter === 'Inbox' ? 'active' : ''}`}
+              onClick={() => setActiveCollectionFilter('Inbox')}
+            >
+              <span className="sidebar-curated-title">Inbox</span>
+              <span className="sidebar-curated-meta">{collectionCounts.get('Inbox') ?? 0} docs</span>
+            </button>
+            <button
+              className={`sidebar-curated-card ${activeCollectionFilter === null ? 'active' : ''}`}
+              onClick={() => setActiveCollectionFilter(null)}
+            >
+              <span className="sidebar-curated-title">All documents</span>
+              <span className="sidebar-curated-meta">{workspacePages.length} docs</span>
+            </button>
+          </div>
+
+          {recentPages.length > 0 && (
+            <div className="sidebar-curated-group">
+              <div className="sidebar-mini-label">Recent</div>
+              <div className="sidebar-mini-list">
+                {recentPages.map(page => (
+                  <button
+                    key={page.id}
+                    className={`sidebar-mini-item ${activeId === page.id ? 'active' : ''}`}
+                    onClick={() => navigate({ to: '/document/$id', params: { id: page.id } })}
+                  >
+                    <span>{page.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {collections.length > 0 && (
+            <div className="sidebar-curated-group">
+              <div className="sidebar-mini-label">Collections</div>
+              <div className="sidebar-chip-list">
+                {collections.map(([collection, count]) => (
+                  <button
+                    key={collection}
+                    className={`sidebar-chip ${activeCollectionFilter === collection ? 'active' : ''}`}
+                    onClick={() => setActiveCollectionFilter(collection)}
+                  >
+                    <span>{collection}</span>
+                    <strong>{count}</strong>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="sidebar-section-header">
-          <span>File Tree</span>
+          <span>Agent View</span>
           <div className="section-actions">
             {isSelectingPages && selectedCount > 0 && (
               <button className="section-text-btn danger" onClick={requestBulkDelete}>
                 Delete {selectedCount}
               </button>
             )}
+            <button
+              className={`section-text-btn ${isAgentViewOpen ? 'active' : ''}`}
+              onClick={() => setIsAgentViewOpen(current => !current)}
+            >
+              {isAgentViewOpen ? 'Hide' : 'Show'}
+            </button>
             <button
               className={`section-text-btn ${isSelectingPages ? 'active' : ''}`}
               onClick={toggleSelectionMode}
@@ -524,15 +609,17 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
           </div>
         </div>
 
-        <div className="page-tree">
-          {taxonomyRoot.folders.length === 0 && (
-            <div className="doc-empty">
-              {searchQuery ? 'No matching pages' : 'No indexed pages'}
-            </div>
-          )}
+        {isAgentViewOpen && (
+          <div className="page-tree">
+            {taxonomyRoot.folders.length === 0 && (
+              <div className="doc-empty">
+                {searchQuery || activeCollectionFilter ? 'No matching pages' : 'No indexed pages'}
+              </div>
+            )}
 
-          {taxonomyRoot.folders.map(folder => renderFolder(folder, 0))}
-        </div>
+            {taxonomyRoot.folders.map(folder => renderFolder(folder, 0))}
+          </div>
+        )}
       </div>
 
       <div className="sidebar-footer">

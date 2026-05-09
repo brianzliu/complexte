@@ -400,6 +400,118 @@ input, textarea {
   padding-bottom: 8px;
 }
 
+.sidebar-curated-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 10px 14px;
+}
+
+.sidebar-curated-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 0 4px;
+}
+
+.sidebar-curated-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 58px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-hover);
+  text-align: left;
+  transition: background var(--fast), border-color var(--fast), color var(--fast);
+}
+
+.sidebar-curated-card:hover,
+.sidebar-curated-card.active {
+  background: var(--bg-active);
+  border-color: var(--border-strong);
+}
+
+.sidebar-curated-title {
+  color: var(--text-1);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.sidebar-curated-meta {
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.sidebar-curated-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 4px;
+}
+
+.sidebar-mini-label {
+  color: var(--text-3);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.sidebar-mini-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sidebar-mini-item {
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: var(--r-md);
+  color: var(--text-2);
+  text-align: left;
+  transition: background var(--fast), color var(--fast);
+}
+
+.sidebar-mini-item:hover,
+.sidebar-mini-item.active {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.sidebar-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sidebar-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-2);
+  transition: background var(--fast), border-color var(--fast), color var(--fast);
+}
+
+.sidebar-chip strong {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+.sidebar-chip:hover,
+.sidebar-chip.active {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--text-1);
+}
+
 .page-tree {
   display: flex;
   flex-direction: column;
