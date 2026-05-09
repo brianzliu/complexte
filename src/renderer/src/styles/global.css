@@ -512,6 +512,61 @@ input, textarea {
   color: var(--text-1);
 }
 
+.sidebar-search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 10px;
+}
+
+.sidebar-search-result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-hover);
+  text-align: left;
+  transition: background var(--fast), border-color var(--fast), color var(--fast);
+}
+
+.sidebar-search-result:hover,
+.sidebar-search-result.active {
+  background: var(--bg-active);
+  border-color: var(--border-strong);
+}
+
+.sidebar-search-result-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sidebar-search-result-title {
+  color: var(--text-1);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.sidebar-search-result-path {
+  color: var(--text-3);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.sidebar-search-result-excerpt {
+  color: var(--text-2);
+  font-size: 11.5px;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .page-tree {
   display: flex;
   flex-direction: column;

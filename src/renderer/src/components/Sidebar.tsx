@@ -1,6 +1,7 @@
 import { useNavigate } from '@tanstack/react-router'
-import { useState, useRef, useEffect } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, MouseEvent } from 'react'
+import { buildExcerpt, scoreDocumentSimilarity } from '../lib/documentIntelligence'
 import { PageMeta, useDocumentStore } from '../store/useDocumentStore'
 
 interface SidebarProps {
@@ -77,6 +78,7 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
     activeWorkspaceId,
     createWorkspace,
     deletePage,
+    getPageContent,
     pages,
     renamePage,
     setActiveWorkspace,
@@ -117,14 +119,38 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
   const collections = Array.from(collectionCounts.entries())
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
   const normalizedSearch = searchQuery.trim().toLowerCase()
-  const visiblePages = workspacePages.filter(page => {
+  const filteredPages = workspacePages.filter(page => {
     const collectionsForPage = page.collections.length > 0 ? page.collections : [getPrimaryCollection(page)]
     if (activeCollectionFilter && !collectionsForPage.includes(activeCollectionFilter)) {
       return false
     }
-    if (!normalizedSearch) return true
-    return `${page.name} ${page.indexedPath.join(' ')} ${collectionsForPage.join(' ')}`.toLowerCase().includes(normalizedSearch)
+    return true
   })
+  const searchResults = useMemo(
+    () => normalizedSearch
+      ? filteredPages
+          .map(page => {
+            const collectionsForPage = page.collections.length > 0 ? page.collections : [getPrimaryCollection(page)]
+            const content = getPageContent(page.id)
+            const score = scoreDocumentSimilarity(
+              `${searchQuery}\n${collectionsForPage.join(' ')}`,
+              `${page.name} ${collectionsForPage.join(' ')}`,
+              `${content}\n${page.indexedPath.join(' ')}`,
+            )
+
+            return {
+              page,
+              score,
+              excerpt: buildExcerpt(content, 180),
+            }
+          })
+          .filter(result => result.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 12)
+      : [],
+    [filteredPages, getPageContent, normalizedSearch, searchQuery],
+  )
+  const visiblePages = normalizedSearch ? searchResults.map(result => result.page) : filteredPages
 
   const taxonomyRoot = createNode('root', [])
   visiblePages.forEach(page => addPageToTree(taxonomyRoot, page))
@@ -588,19 +614,21 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
         </div>
 
         <div className="sidebar-section-header">
-          <span>Agent View</span>
+          <span>{normalizedSearch ? 'Search Results' : 'Agent View'}</span>
           <div className="section-actions">
             {isSelectingPages && selectedCount > 0 && (
               <button className="section-text-btn danger" onClick={requestBulkDelete}>
                 Delete {selectedCount}
               </button>
             )}
-            <button
-              className={`section-text-btn ${isAgentViewOpen ? 'active' : ''}`}
-              onClick={() => setIsAgentViewOpen(current => !current)}
-            >
-              {isAgentViewOpen ? 'Hide' : 'Show'}
-            </button>
+            {!normalizedSearch && (
+              <button
+                className={`section-text-btn ${isAgentViewOpen ? 'active' : ''}`}
+                onClick={() => setIsAgentViewOpen(current => !current)}
+              >
+                {isAgentViewOpen ? 'Hide' : 'Show'}
+              </button>
+            )}
             <button
               className={`section-text-btn ${isSelectingPages ? 'active' : ''}`}
               onClick={toggleSelectionMode}
@@ -616,11 +644,35 @@ export default function Sidebar({ onNewPage }: SidebarProps) {
           </div>
         </div>
 
-        {isAgentViewOpen && (
+        {normalizedSearch ? (
+          <div className="sidebar-search-results">
+            {searchResults.length === 0 && (
+              <div className="doc-empty">No matching documents</div>
+            )}
+
+            {searchResults.map(result => {
+              const page = result.page
+              return (
+                <button
+                  key={page.id}
+                  className={`sidebar-search-result ${activeId === page.id ? 'active' : ''}`}
+                  onClick={() => navigate({ to: '/document/$id', params: { id: page.id } })}
+                  onContextMenu={e => handlePageContextMenu(e, page.id)}
+                >
+                  <div className="sidebar-search-result-top">
+                    <span className="sidebar-search-result-title">{page.name}</span>
+                    <span className="sidebar-search-result-path">{page.collections[0] || page.indexedPath[0] || 'Unsorted'}</span>
+                  </div>
+                  <div className="sidebar-search-result-excerpt">{result.excerpt || 'No preview available.'}</div>
+                </button>
+              )
+            })}
+          </div>
+        ) : isAgentViewOpen && (
           <div className="page-tree">
             {taxonomyRoot.folders.length === 0 && (
               <div className="doc-empty">
-                {searchQuery || activeCollectionFilter ? 'No matching pages' : 'No indexed pages'}
+                {activeCollectionFilter ? 'No matching pages' : 'No indexed pages'}
               </div>
             )}
 
